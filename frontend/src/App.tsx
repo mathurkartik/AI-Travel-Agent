@@ -1,0 +1,589 @@
+/**
+ * AI Travel Planner - Frontend App (Modern UI)
+ * Phase 9: Updated UI matching tour-booking design
+ */
+
+import { useState } from 'react';
+import { usePlan } from './hooks';
+import type { PlanResponse } from './types';
+import './App.css';
+
+// Icons as SVG components
+const GlobeIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <line x1="2" y1="12" x2="22" y2="12"/>
+    <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+  </svg>
+);
+
+const SearchIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="11" cy="11" r="8"/>
+    <path d="m21 21-4.35-4.35"/>
+  </svg>
+);
+
+const HeartIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
+  </svg>
+);
+
+const StarIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12"/>
+  </svg>
+);
+
+const ClockIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <polyline points="12 6 12 12 16 14"/>
+  </svg>
+);
+
+const MapPinIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/>
+    <circle cx="12" cy="10" r="3"/>
+  </svg>
+);
+
+const ArrowRightIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12h14"/>
+    <path d="m12 5 7 7-7 7"/>
+  </svg>
+);
+
+const AIAgentIcon = () => (
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2a3 3 0 0 0-3 3v14a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+    <path d="M12 8h.01"/>
+    <path d="M11 12h2"/>
+    <path d="M12 16v.01"/>
+  </svg>
+);
+
+const BuildingIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M6 22V9a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v13"/>
+    <path d="M9 22v-4h6v4"/>
+    <path d="M10 9h4"/>
+    <path d="M10 13h4"/>
+    <path d="M4 22h16"/>
+  </svg>
+);
+
+const UtensilsIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/>
+    <path d="M7 2v20"/>
+    <path d="M21 15V2v0a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/>
+  </svg>
+);
+
+// Mock data for homepage
+const POPULAR_DESTINATIONS = [
+  {
+    id: 1,
+    name: 'New York City',
+    description: 'Experience the bustling streets, iconic landmarks, and vibrant arts scene of the Big Apple. Perfect for foodies, art lovers, and urban explorers.',
+    rating: 4.9,
+    price: 450,
+    image: 'https://images.unsplash.com/photo-1496442226666-8d4d0e62e6e9?w=600',
+  },
+  {
+    id: 2,
+    name: 'Paris',
+    description: 'Discover the city of love, famous for its cafe culture, haute couture, and landmarks like the Louvre and Eiffel Tower.',
+    rating: 4.8,
+    price: 520,
+    image: 'https://images.unsplash.com/photo-1499856871958-5b9627545d1a?w=600',
+  },
+  {
+    id: 3,
+    name: 'Tokyo',
+    description: 'A mesmerizing mix of ultramodern and the traditional, from neon-lit skyscrapers to historic temples.',
+    rating: 4.9,
+    price: 680,
+    image: 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=600',
+  },
+];
+
+const PROPERTY_TYPES = [
+  { name: 'Hotels', count: '12,453 properties', image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400' },
+  { name: 'Apartments', count: '5,832 properties', image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400' },
+];
+
+function App() {
+  const [view, setView] = useState<'home' | 'result'>('home');
+  const [response, setResponse] = useState<PlanResponse | null>(null);
+  const [requestText, setRequestText] = useState('');
+  const { loading, error, traceId, submitPlan, checkBackendHealth, clearError } = usePlan();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!requestText.trim()) return;
+    
+    const result = await submitPlan(requestText);
+    if (result) {
+      setResponse(result);
+      setView('result');
+    }
+  };
+
+  const handleDestinationClick = (destination: string) => {
+    const text = `Plan a 5-day trip to ${destination}. $2000 budget. Love food and sightseeing.`;
+    setRequestText(text);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Home View
+  if (view === 'home') {
+    return (
+      <div className="app">
+        {/* Header */}
+        <header className="header">
+          <div className="header-content">
+            <div className="logo">
+              <GlobeIcon />
+              <span>GlobeAI</span>
+            </div>
+            <nav className="nav-links">
+              <a href="#" className="nav-link active">Explore</a>
+              <a href="#" className="nav-link">My Trips</a>
+              <a href="#" className="nav-link">Destinations</a>
+              <a href="#" className="nav-link">Support</a>
+            </nav>
+            <div className="header-actions">
+              <button className="icon-button" onClick={checkBackendHealth} title="Check Backend Health">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+                  <polyline points="22 4 12 14.01 9 11.01"/>
+                </svg>
+              </button>
+              <button className="icon-button">
+                <HeartIcon />
+              </button>
+              <button className="icon-button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="8" r="5"/>
+                  <path d="M20 21a8 8 0 1 0-16 0"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Error Display */}
+        {error && (
+          <div className="error-banner">
+            <div className="error-content">
+              <span>⚠️</span>
+              <span>{error}</span>
+            </div>
+            <button className="error-close" onClick={clearError}>×</button>
+          </div>
+        )}
+
+        {/* Hero Section */}
+        <section className="hero">
+          <div className="hero-content">
+            <h1>Your AI-Powered Travel Agent</h1>
+            <p className="hero-subtitle">Tell me your dream trip and I'll build the perfect itinerary in seconds.</p>
+            
+            <form onSubmit={handleSubmit} className="search-box">
+              <div className="search-input-wrapper">
+                <span className="search-icon"><SearchIcon /></span>
+                <input
+                  type="text"
+                  className="search-input"
+                  placeholder="Describe your perfect trip... (e.g., 5 days in NYC for art lovers on a budget)"
+                  value={requestText}
+                  onChange={(e) => setRequestText(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+              <button type="submit" className="search-button" disabled={loading || !requestText.trim()}>
+                {loading ? (
+                  <>
+                    <span className="spinner" style={{ width: 16, height: 16, borderTopColor: '#333' }} />
+                    Planning your trip...
+                  </>
+                ) : (
+                  <>Generate Itinerary</>
+                )}
+              </button>
+            </form>
+          </div>
+        </section>
+
+        {/* Property Types */}
+        <section className="section">
+          <h2 className="section-title">Browse by property type</h2>
+          <div className="property-grid">
+            {PROPERTY_TYPES.map((type) => (
+              <div key={type.name} className="property-card">
+                <img src={type.image} alt={type.name} className="property-card-image" />
+                <div className="property-card-overlay">
+                  <div className="property-card-title">{type.name}</div>
+                  <div className="property-card-count">{type.count}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Popular Destinations */}
+        <section className="section">
+          <h2 className="section-title">Popular Destinations</h2>
+          <div className="destination-list">
+            {POPULAR_DESTINATIONS.map((dest) => (
+              <div key={dest.id} className="destination-card">
+                <div className="destination-card-image-wrapper">
+                  <img src={dest.image} alt={dest.name} className="destination-card-image" />
+                  <button className="favorite-button">
+                    <HeartIcon />
+                  </button>
+                </div>
+                <div className="destination-card-content">
+                  <div className="destination-header">
+                    <h3 className="destination-name">{dest.name}</h3>
+                    <div className="destination-rating">
+                      <StarIcon />
+                      <span>{dest.rating}</span>
+                    </div>
+                  </div>
+                  <p className="destination-description">{dest.description}</p>
+                  <div className="destination-footer">
+                    <div className="destination-price">
+                      <span className="price-label">Starting from</span>
+                      <span className="price-value">${dest.price}<span className="price-unit">/trip</span></span>
+                    </div>
+                    <button 
+                      className="view-trips-button"
+                      onClick={() => handleDestinationClick(dest.name)}
+                    >
+                      View Trips
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Footer */}
+        <footer className="footer">
+          <div className="footer-content">
+            <div className="footer-bottom">
+              <div className="footer-logo">
+                <GlobeIcon />
+                <span>GlobeAI</span>
+              </div>
+              <p>© 2024 GlobeAI Travel. All rights reserved.</p>
+            </div>
+          </div>
+        </footer>
+      </div>
+    );
+  }
+
+  // Result View
+  if (!response) return null;
+
+  const { final_itinerary, constraints, review_summary } = response;
+
+  return (
+    <div className="app">
+      {/* Yellow Header */}
+      <header className="header" style={{ background: 'linear-gradient(135deg, #ffc107 0%, #e6ac00 100%)' }}>
+        <div className="header-content">
+          <div className="logo" style={{ color: '#1a1a1a' }}>
+            <GlobeIcon />
+            <span>GlobeTrek</span>
+          </div>
+          <nav className="nav-links">
+            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }} onClick={() => setView('home')}>Explore</a>
+            <a href="#" className="nav-link active" style={{ color: '#1a1a1a', borderBottomColor: '#1a1a1a' }}>Itineraries</a>
+            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }}>Destinations</a>
+            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }}>Passes</a>
+            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }}>Community</a>
+          </nav>
+          <div className="header-actions">
+            <button className="icon-button" style={{ color: '#1a1a1a' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="m21 21-4.35-4.35"/>
+              </svg>
+            </button>
+            <button className="icon-button" style={{ color: '#1a1a1a' }}>
+              <HeartIcon />
+            </button>
+            <button className="icon-button" style={{ background: '#1a1a1a', color: 'white', borderRadius: '20px', padding: '8px 16px' }}>
+              Sign in
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Disclaimer Banner */}
+      <div style={{ background: '#ffc107', padding: '8px', textAlign: 'center', fontSize: '13px' }}>
+        <span>⚠️ Generated by AI. Verify all prices before booking.</span>
+      </div>
+
+      {/* Itinerary Result */}
+      <div className="itinerary-page">
+        {/* Hero */}
+        <div className="itinerary-hero">
+          <div className="itinerary-hero-content">
+            <div className="itinerary-hero-badge">
+              <AIAgentIcon />
+              <span>AI Generated Itinerary</span>
+            </div>
+            <h1>Discover your perfect {constraints.duration_days}-day {constraints.cities[0]} itinerary</h1>
+            <p className="itinerary-hero-subtitle">
+              Curated specifically for art lovers, foodies, and urban explorers. Optimized for budget and transit efficiency.
+            </p>
+            <button className="explore-button">
+              Explore Full Itinerary <ArrowRightIcon />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="itinerary-content">
+          {/* Main Content */}
+          <div className="itinerary-main">
+            {/* About Section */}
+            <div className="content-card">
+              <h3 className="card-title">About Your {constraints.cities[0]} Journey</h3>
+              <p className="about-text">
+                Welcome to the city that never sleeps. This {constraints.duration_days}-day itinerary has been meticulously crafted by our AI agents 
+                to balance iconic sightseeing with local neighborhood vibes. We've optimized your travel routes to minimize transit time, 
+                allowing you to immerse yourself fully in {constraints.cities[0]}'s energy and creative spirit.
+              </p>
+              
+              <div className="feature-grid">
+                <div className="feature-card">
+                  <div className="feature-icon"><BuildingIcon /></div>
+                  <div className="feature-content">
+                    <span className="feature-label">Stay</span>
+                    <span className="feature-value">Midtown area</span>
+                  </div>
+                </div>
+                <div className="feature-card">
+                  <div className="feature-icon"><UtensilsIcon /></div>
+                  <div className="feature-content">
+                    <span className="feature-label">Dining</span>
+                    <span className="feature-value">Michelin Picks</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Budget Breakdown */}
+            <div className="content-card">
+              <div className="budget-header">
+                <h3 className="card-title" style={{ margin: 0 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <rect x="2" y="5" width="20" height="14" rx="2"/>
+                      <line x1="2" y1="10" x2="22" y2="10"/>
+                    </svg>
+                    Budget Breakdown
+                  </span>
+                </h3>
+                <div className="budget-status">
+                  <CheckIcon />
+                  <span>Within Budget</span>
+                </div>
+              </div>
+              
+              <div className="budget-categories">
+                <div className="budget-category">
+                  <div className="category-name">Accommodation</div>
+                  <div className="category-value">$800</div>
+                </div>
+                <div className="budget-category">
+                  <div className="category-name">Activities</div>
+                  <div className="category-value">$600</div>
+                </div>
+                <div className="budget-category">
+                  <div className="category-name">Food</div>
+                  <div className="category-value">$400</div>
+                </div>
+                <div className="budget-category">
+                  <div className="category-name">Transport</div>
+                  <div className="category-value">$200</div>
+                </div>
+              </div>
+              
+              <div className="budget-total">
+                <span className="budget-total-label">Total Estimated Cost</span>
+                <span className="budget-total-value">${final_itinerary.budget_rollup.grand_total}</span>
+              </div>
+            </div>
+
+            {/* Daily Schedule */}
+            <div className="content-card">
+              <h3 className="card-title">Daily Schedule</h3>
+              <div className="schedule-section">
+                {final_itinerary.days.slice(0, 2).map((day, index) => (
+                  <div key={day.day_number} className="day-card">
+                    <div className="day-timeline">
+                      <div className="day-timeline-dot" />
+                    </div>
+                    <div className="day-header">
+                      <span className="day-badge">Day {day.day_number}</span>
+                      <span className="day-title">{index === 0 ? 'Manhattan Exploration' : 'Brooklyn & Culture'}</span>
+                    </div>
+                    <div className="activities-grid">
+                      {day.items.slice(0, 4).map((item, i) => (
+                        <div key={i} className="activity-card">
+                          <div className="activity-time">{item.time}</div>
+                          <div className="activity-title">{item.activity_name}</div>
+                          <div className="activity-description">{item.notes}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* AI Agents */}
+            <div className="content-card agents-section">
+              <h3 className="card-title">Meet Your AI Agents</h3>
+              <div className="agents-grid">
+                <div className="agent-card">
+                  <div className="agent-icon"><MapPinIcon /></div>
+                  <div className="agent-name">Destination</div>
+                  <div className="agent-role">Curated Attractions</div>
+                  <div className="agent-status"><CheckIcon /> Verified</div>
+                </div>
+                <div className="agent-card">
+                  <div className="agent-icon"><ClockIcon /></div>
+                  <div className="agent-name">Logistics</div>
+                  <div className="agent-role">Optimized Routing</div>
+                  <div className="agent-status"><CheckIcon /> Verified</div>
+                </div>
+                <div className="agent-card">
+                  <div className="agent-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="12" y1="1" x2="12" y2="23"/>
+                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                    </svg>
+                  </div>
+                  <div className="agent-name">Budget</div>
+                  <div className="agent-role">Cost Optimization</div>
+                  <div className="agent-status"><CheckIcon /> Verified</div>
+                </div>
+                <div className="agent-card">
+                  <div className="agent-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14 2 14 8 20 8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                    </svg>
+                  </div>
+                  <div className="agent-name">Review</div>
+                  <div className="agent-role">Quality Assurance</div>
+                  <div className="agent-status"><CheckIcon /> PASS</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sidebar */}
+          <div className="itinerary-sidebar">
+            <div className="sidebar-card">
+              <div className="review-status-header">
+                <span style={{ fontWeight: 600 }}>Review Status:</span>
+                <div className="review-badge">
+                  <CheckIcon />
+                  <span>{review_summary.toUpperCase()}</span>
+                </div>
+              </div>
+              
+              <div className="trace-id">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
+                Trace ID: {traceId}
+              </div>
+              
+              <div className="validated-by">Validated by 4 AI agents</div>
+              
+              <button className="book-button">
+                Book This Itinerary <ArrowRightIcon />
+              </button>
+              
+              <div className="testimonial">
+                <div className="stars">★★★★★</div>
+                <p className="testimonial-text">
+                  "The AI perfectly balanced tourist spots with local hidden gems. The routing saved us hours of subway travel!"
+                </p>
+                <div className="testimonial-author">
+                  <div className="author-avatar">SJ</div>
+                  <div className="author-info">
+                    <span className="author-name">Sarah J.</span>
+                    <span className="author-detail">Traveled to NYC</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <footer className="footer">
+          <div className="footer-content">
+            <div className="footer-top">
+              <div className="footer-brand">
+                <div className="footer-logo">
+                  <GlobeIcon />
+                  <span>GlobeTrek</span>
+                </div>
+                <span className="footer-tagline">AI-powered travel planning</span>
+              </div>
+              <div className="footer-links">
+                <div className="footer-column">
+                  <div className="footer-column-title">Company</div>
+                  <a href="#" className="footer-link">About Us</a>
+                  <a href="#" className="footer-link">Careers</a>
+                  <a href="#" className="footer-link">Press</a>
+                </div>
+                <div className="footer-column">
+                  <div className="footer-column-title">Support</div>
+                  <a href="#" className="footer-link">Help Center</a>
+                  <a href="#" className="footer-link">Terms of Service</a>
+                  <a href="#" className="footer-link">Privacy Policy</a>
+                </div>
+              </div>
+            </div>
+            <div className="footer-bottom">
+              <div className="footer-logo">
+                <GlobeIcon />
+                <span>GlobeTrek</span>
+              </div>
+              <p>© 2024 GlobeTrek Exploration. All rights reserved.</p>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
+export default App;
