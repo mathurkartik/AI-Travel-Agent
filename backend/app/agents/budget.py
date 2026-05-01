@@ -175,7 +175,7 @@ class BudgetAgent:
             category="stay",
             estimated_total=round(total_cost, 2),
             currency=constraints.currency,
-            notes=f"{nights} nights in {city} ({price_band} hotel)"
+            notes=f"{nights} nights in {city} ({price_band} accommodation). Estimated at {round(total_cost/nights, 2)} {constraints.currency} per night."
         )
     
     async def _estimate_food_cost(
@@ -241,15 +241,26 @@ class BudgetAgent:
         # Add local transport estimate
         days = max(1, constraints.duration_days // len(constraints.cities))
         local_transport = 10 * days  # ~$10 per day for local transport
-        
         total_cost_usd = transport_cost + local_transport
+    
+        if constraints.is_road_trip:
+            # For road trips, transport includes car rental + fuel
+            # Divide total car cost across cities for the breakdown
+            car_rental_daily_usd = 100 if "iceland" in constraints.destination_region.lower() else 70
+            fuel_daily_usd = 30
+            total_car_usd = (car_rental_daily_usd + fuel_daily_usd) * (constraints.duration_days / len(constraints.cities))
+            total_cost_usd += total_car_usd
+            notes = f"SUV Rental + Fuel + Local parking in/around {city}"
+        else:
+            notes = f"Inter-city transit + local transport in {city}"
+
         total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
         
         return BudgetCategory(
             category="transport",
             estimated_total=round(total_cost, 2),
             currency=constraints.currency,
-            notes=f"Transport to/from and within {city}"
+            notes=notes
         )
     
     async def _estimate_activity_cost(

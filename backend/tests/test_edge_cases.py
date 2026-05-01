@@ -104,7 +104,7 @@ class TestTravelConstraintsEdgeCases:
         TravelConstraints(
             destination_region="Test",
             cities=["City"],
-            duration_days=30,  # Max
+            duration_days=90,  # Max
             budget_total=100,
         )
         
@@ -120,12 +120,12 @@ class TestTravelConstraintsEdgeCases:
             TravelConstraints(
                 destination_region="Test",
                 cities=["City"],
-                duration_days=31,  # Above max
+                duration_days=91,  # Above max
                 budget_total=100,
             )
     
     def test_budget_boundary_values(self):
-        """Test budget boundaries (gt=0, le=1000000)."""
+        """Test budget boundaries (gt=0, le=100000000)."""
         # Valid
         TravelConstraints(
             destination_region="Test",
@@ -137,7 +137,7 @@ class TestTravelConstraintsEdgeCases:
             destination_region="Test",
             cities=["City"],
             duration_days=5,
-            budget_total=1000000,  # Max
+            budget_total=100000000,  # Max
         )
         
         # Invalid
@@ -160,7 +160,7 @@ class TestTravelConstraintsEdgeCases:
                 destination_region="Test",
                 cities=["City"],
                 duration_days=5,
-                budget_total=1000001,  # Above max
+                budget_total=100000001,  # Above max
             )
     
     def test_currency_lowercase_converts_to_uppercase(self):

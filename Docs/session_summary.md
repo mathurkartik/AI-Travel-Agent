@@ -4,6 +4,40 @@ Quick reference of key outcomes from each development session.
 
 ---
 
+## Session 17 | 2026-05-01 | Test Suite Stabilization & Logic Refinement
+
+### Summary
+Stabilized the system after major hierarchical and global updates. Resolved all programmatic test failures, hardened the scaling logic for trip regions, and ensured short-duration trips are handled correctly within the new architecture.
+
+### Key Deliverables
+- **Stabilized Test Suite**: Fixed `test_edge_cases.py`, `test_tool_router.py`, and `test_phase6.py` to match the current globalized schema and pricing data.
+- **Robust Trip Scaling**: Fixed a Pydantic validation bug in `TripStructuringAgent` where scaling could result in 0-day regions.
+- **Short Trip Logic**: Refined the `TripStructuringAgent` routing to ensure 1-5 day trips don't accidentally get forced into multi-region templates.
+- **New Test Coverage**: Added `test_trip_structuring.py` to verify all hierarchical planning logic.
+- **Restored Reviews**: Re-implemented the `no_duplicate_days` check in the Review Agent.
+
+### Status
+✅ **Production Ready** - All 167 core tests pass. System handles both complex road trips and simple city breaks with high reliability.
+
+---
+
+## Session 16 | 2026-05-01 | Deepening AI Road Trip Planning & Hierarchical Structuring
+
+### Summary
+Addressed the critical problem of the AI planner failing on long-duration, multi-region road trips (e.g., 15-day Iceland trips) by generating repetitive, single-city itineraries. Introduced a hierarchical "Trip Structuring" layer that physically structures the geography of the trip *before* agent execution.
+
+### Key Deliverables
+- **TripStructuringAgent**: A new agent added *before* parallel execution that detects road trip/multi-city destinations and breaks the timeline into logical geographic regions (e.g., Reykjavik -> South Coast -> East Fjords).
+- **Per-Region Orchestration**: Updated `OrchestratorAgent.create_plan` to iterate through the generated regions, running the Destination, Logistics, and Budget agents independently for each region with proportionally scaled constraints.
+- **Route Databases**: Added hardcoded route knowledge for major destinations (Iceland, Norway, New Zealand, Scotland, Switzerland, Ireland, Portugal, Japan, Italy, Spain).
+- **Advanced Review Checks**: Added `geographic_progression` (ensures long trips don't stay in one city) and `day_diversity` (checks for highly repetitive daily activity structures) to the Review Agent.
+- **Stub Overhaul**: Completely rewrote the fallback stub generation to support route-aware, varied daily themes instead of static repetition.
+
+### Status
+✅ **Deep Road Trip Capability** - The system correctly handles and models long multi-region trips without generic repetition.
+
+---
+
 ## Session 15 | 2026-05-01 | Globalization & Dynamic Rendering
 
 ### Summary

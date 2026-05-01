@@ -4,6 +4,73 @@ This file tracks all work sessions and task completions for the AI Travel Planne
 
 ---
 
+## 2026-05-01 | Session 17 | Test Suite Stabilization & Logic Refinement
+
+### Tasks Completed
+
+1. **Test Suite Stabilization**
+   - **`test_edge_cases.py`**: Updated boundary value tests for `TravelConstraints` (duration max 90, budget max 100M) to align with Session 15 schema changes.
+   - **`test_tool_router.py`**: Updated price band assertions to match the new global pricing notes ("Mid-range", "Luxury", "Street food / casual") introduced in Session 15.
+   - **`test_phase6.py`**: Fixed `test_checklist_items_populated` by restoring the `no_duplicate_days` check in `ReviewAgent`.
+
+2. **Hierarchical Logic Hardening**
+   - **`TripStructuringAgent`**: Fixed scaling logic in `_scale_regions_to_duration` to prevent regions from being assigned 0 days (Pydantic validation error).
+   - **`TripStructuringAgent`**: Reordered routing logic in `structure()` to ensure short, single-city trips (≤ 7 days) are always handled by `_structure_city_trip` even if the country has a multi-city template (e.g., Japan).
+   - **`test_trip_structuring.py`**: Created a new comprehensive test suite for the hierarchical structuring agent, covering road trips, single cities, and fallback logic.
+
+3. **Bug Fixes**
+   - Restored `no_duplicate_days` programmatic check to `ReviewAgent`.
+   - Fixed attribute name mismatches in tests (`route_type` -> `trip_type`, `allocated_days` -> `days`).
+
+### Files Modified
+- `backend/app/agents/review.py` - Restored duplicate day check.
+- `backend/app/agents/trip_structuring.py` - Fixed scaling and routing logic.
+- `backend/tests/test_edge_cases.py` - Updated boundary values.
+- `backend/tests/test_tool_router.py` - Updated string assertions.
+- `backend/tests/test_trip_structuring.py` - New test file.
+
+### Status
+✅ **System Stable** - 167/167 tests passing (programmatic).
+✅ **Logic Hardened** - Hierarchical planning now handles edge cases and short durations correctly.
+
+---
+
+## 2026-05-01 | Session 16 | Deepening AI Road Trip Planning & Hierarchical Structuring
+
+### Tasks Completed
+
+1. **Hierarchical Trip Planning Layer**
+   - Implemented `TripStructuringAgent` to break long-duration (>7 days) and multi-region trips into logical geographic segments.
+   - Integrated route databases for major road trip countries (Iceland, Norway, New Zealand, Scotland, Ireland, Portugal, Switzerland) and multi-city trips (Japan, Italy, Spain).
+   - Created `TripStructure` and `Region` data models to enforce scale and pacing.
+
+2. **Orchestrator Pipeline Enhancement**
+   - Modified `OrchestratorAgent.create_plan` to implement a two-step execution process.
+   - Added `_run_agents_per_region()`: For long trips, agents (Destination, Logistics, Budget) now run independently *per region* with proportionally scaled constraints, then merge results. This completely eliminates the "stuck in one city" bug for 15-day trips.
+   - Kept `_run_agents_flat()` for short, single-city requests.
+
+3. **Enhanced Review & Quality Gates**
+   - Added `geographic_progression` check to `ReviewAgent` to flag long trips that lack geographic spread.
+   - Added `day_diversity` check to ensure the LLM isn't simply repeating the identical activity types every day.
+
+4. **Stub Mode Fixes**
+   - Overhauled `routes.py` stub generation to be route-aware, replacing the static "Cultural and Historic Tour" repetition with destination-specific themes (e.g., glaciers and waterfalls for Iceland).
+
+### Files Modified
+- `backend/app/models/schemas.py` - Added TripStructure/Region models.
+- `backend/app/models/__init__.py` - Exported new models.
+- `backend/app/agents/trip_structuring.py` - Created new agent.
+- `backend/app/agents/__init__.py` - Exported new agent.
+- `backend/app/agents/orchestrator.py` - Implemented hierarchical execution pipeline.
+- `backend/app/agents/review.py` - Added geographic progression/diversity checks.
+- `backend/app/api/routes.py` - Fixed generic stub mode repetition.
+
+### Status
+✅ **Deep Road Trip Capability** - System now accurately models multi-region tours.
+✅ **Eliminated Generic Repetition** - Daily structure is now varied and region-specific.
+
+---
+
 ## 2026-05-01 | Session 15 | Globalization & Dynamic Rendering
 
 ### Tasks Completed

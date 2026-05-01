@@ -301,7 +301,7 @@ function App() {
   if (!response) return null;
 
   const { final_itinerary, constraints, review_summary } = response;
-  const { budget_rollup, neighborhoods, days, logistics_summary } = final_itinerary;
+  const { budget_rollup, neighborhoods, days, logistics_summary, strategic_insight, budget_analysis, cost_optimization_tips, logistics_output } = final_itinerary as any;
 
   // ── helpers ──────────────────────────────────────────────────────────────
   const getCurrencySymbol = (currency: string): string => {
@@ -439,6 +439,40 @@ function App() {
                 </div>
               </div>
             </div>
+
+            {/* Strategy & Insights */}
+            {(strategic_insight || budget_analysis || (final_itinerary as any).route_description) && (
+              <div className="content-card" style={{ borderLeft: '4px solid #ffc107' }}>
+                {(final_itinerary as any).route_description && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <h4 style={{ margin: '0 0 8px', fontSize: '15px' }}>🗺️ Route Overview</h4>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#4b5563', lineHeight: 1.6 }}>{(final_itinerary as any).route_description}</p>
+                  </div>
+                )}
+                {strategic_insight && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <h4 style={{ margin: '0 0 8px', fontSize: '15px' }}>💡 Why This Itinerary Works</h4>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#4b5563', lineHeight: 1.6 }}>{strategic_insight}</p>
+                  </div>
+                )}
+                {budget_analysis && (
+                  <div style={{ marginBottom: '16px' }}>
+                    <h4 style={{ margin: '0 0 8px', fontSize: '15px' }}>💰 Budget Reality Check</h4>
+                    <p style={{ margin: 0, fontSize: '14px', color: '#4b5563', lineHeight: 1.6 }}>{budget_analysis}</p>
+                  </div>
+                )}
+                {cost_optimization_tips && cost_optimization_tips.length > 0 && (
+                  <div>
+                    <h4 style={{ margin: '0 0 12px', fontSize: '15px' }}>🚀 Optimization Tips</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' }}>
+                      {cost_optimization_tips.map((tip: string, i: number) => (
+                        <div key={i} style={{ background: '#f9fafb', padding: '10px', borderRadius: '8px', fontSize: '13px', color: '#4b5563', border: '1px solid #e5e7eb' }}>{tip}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Budget Breakdown */}
             <div className="content-card">

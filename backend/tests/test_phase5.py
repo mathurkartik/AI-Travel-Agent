@@ -237,11 +237,57 @@ class TestOrchestratorErrorHandling:
         
         # Make destination agent fail
         orchestrator.destination_agent.research = AsyncMock(side_effect=Exception("Search failed"))
+    
+        # Should NOT raise RuntimeError anymore due to Phase 8 partial failure handling
+        # It should fallback to a static catalog and complete the plan
+        result = await orchestrator.create_plan("Plan a trip", trace_id="test-trace-id")
         
-        with pytest.raises(RuntimeError) as exc_info:
-            await orchestrator.create_plan("Test request")
+        # Verify it used the fallback catalog (should have generated activities)
+        assert len(result.days) > 0
+        assert "Search failed" not in result.disclaimer
+
+
+class TestOrchestratorHierarchical:
+    """Test hierarchical planning flow introduced in Session 16."""
+
+    @pytest.fixture
+    def long_constraints(self):
+        return TravelConstraints(
+            destination_region="Iceland",
+            cities=["Reykjavik", "Vik", "Akureyri"],
+            duration_days=10,
+            budget_total=5000,
+            currency="USD"
+        )
+
+    @pytest.mark.asyncio
+    async def test_uses_structuring_for_long_trip(self, long_constraints):
+        """Orchestrator should use TripStructuringAgent for trips > 7 days."""
+        orchestrator = OrchestratorAgent(llm_client=None)
+        orchestrator.extract_constraints = AsyncMock(return_value=long_constraints)
         
-        assert "Agent execution failed" in str(exc_info.value)
+        # Mock per-region execution to track calls
+        orchestrator._run_agents_per_region = AsyncMock(wraps=orchestrator._run_agents_per_region)
+        orchestrator._run_agents_flat = AsyncMock(wraps=orchestrator._run_agents_flat)
+        
+        await orchestrator.create_plan("10 days in Iceland")
+        
+        assert orchestrator._run_agents_per_region.called
+        assert not orchestrator._run_agents_flat.called
+
+    @pytest.mark.asyncio
+    async def test_uses_flat_for_short_trip(self, sample_constraints):
+        """Orchestrator should use flat execution for short trips."""
+        orchestrator = OrchestratorAgent(llm_client=None)
+        orchestrator.extract_constraints = AsyncMock(return_value=sample_constraints)
+        
+        orchestrator._run_agents_per_region = AsyncMock(wraps=orchestrator._run_agents_per_region)
+        orchestrator._run_agents_flat = AsyncMock(wraps=orchestrator._run_agents_flat)
+        
+        await orchestrator.create_plan("5 days in Japan")
+        
+        assert not orchestrator._run_agents_per_region.called
+        assert orchestrator._run_agents_flat.called
 
 
 if __name__ == "__main__":

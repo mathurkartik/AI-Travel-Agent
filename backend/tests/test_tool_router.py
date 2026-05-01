@@ -70,7 +70,7 @@ class TestToolRouter:
         result = await router.price_band("hotel", "Tokyo", "moderate")
         
         assert result["estimate_usd"] == 120
-        assert "3-star" in result["notes"]
+        assert "Mid-range" in result["notes"] or "Standard" in result["notes"]
         assert result["currency"] == "USD"
     
     @pytest.mark.asyncio
@@ -79,7 +79,7 @@ class TestToolRouter:
         result = await router.price_band("food", "Kyoto", "budget")
         
         assert result["estimate_usd"] == 15
-        assert "convenience" in result["notes"].lower()
+        assert "casual" in result["notes"].lower() or "street" in result["notes"].lower()
     
     @pytest.mark.asyncio
     async def test_price_band_europe(self, router):
@@ -87,7 +87,7 @@ class TestToolRouter:
         result = await router.price_band("hotel", "Paris", "luxury")
         
         assert result["estimate_usd"] == 600
-        assert "5-star" in result["notes"]
+        assert "Luxury" in result["notes"] or "Premium" in result["notes"]
     
     @pytest.mark.asyncio
     async def test_fx_convert_jpy_to_usd(self, router):

@@ -84,6 +84,7 @@ class LogisticsAgent:
             movement_plans=movement_plans,
             day_skeletons=day_skeletons,
             total_estimated_transit_hours=total_transit_hours,
+            route_description=self._generate_route_description(constraints) if constraints.is_road_trip else None,
             logistics_summary=self._generate_summary(movement_plans)
         )
     
@@ -196,6 +197,13 @@ class LogisticsAgent:
             "mumbai": ["Colaba", "Bandra", "Marine Drive"],
             "delhi": ["Connaught Place", "Hauz Khas", "Lodi Colony"],
             "bangalore": ["Indiranagar", "Koramangala", "MG Road"],
+            # Iceland Regions
+            "reykjavik": ["Downtown", "Laugardalur", "Hafnarfjordur"],
+            "vik": ["South Coast", "Skogar", "Vik Village"],
+            "hofn": ["Diamond Beach", "Glacier Lagoon", "Hofn Harbor"],
+            "egilsstadir": ["East Fjords", "Seydisfjordur", "Lagarfljot"],
+            "akureyri": ["North Iceland", "Lake Myvatn", "Hsavik"],
+            "borgarnes": ["Snaefellsnes Peninsula", "Kirkjufell", "Stykkisholmur"],
         }
         return defaults.get(city.lower(), [f"{city} City Centre", f"Central {city}"])
 
@@ -442,3 +450,14 @@ class LogisticsAgent:
             parts.append(f"{move.from_city} → {move.to_city} ({move.mode}, {move.duration_hours}h)")
         
         return " | ".join(parts)
+
+    def _generate_route_description(self, constraints: TravelConstraints) -> str:
+        """Generate a narrative overview of the road trip route."""
+        dest = constraints.destination_region.lower()
+        if "iceland" in dest:
+            return "This itinerary follows the legendary Ring Road (Route 1) counter-clockwise: covering the South Coast waterfalls, Jökulsárlón glacier lagoon, the dramatic East Fjords, North Iceland's volcanic landscapes, and the Snæfellsnes Peninsula."
+        elif "norway" in dest:
+            return "A scenic drive through the Western Fjords, including the Atlantic Ocean Road, Geirangerfjord, and the dramatic coastal mountains."
+        elif "japan" in dest:
+            return "A journey through the Japanese Alps and coastal regions, connecting Tokyo, Hakone, Takayama, and Kanazawa."
+        return f"A comprehensive road trip route through {constraints.destination_region}, optimized for scenic driving and balanced pacing across all major regions."

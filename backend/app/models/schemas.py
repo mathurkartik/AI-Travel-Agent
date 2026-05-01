@@ -70,6 +70,7 @@ class TravelConstraints(BaseModel):
     avoidances: List[str] = Field(default_factory=list, description="What the user wants to avoid (e.g., 'crowds')")
     hard_requirements: List[str] = Field(default_factory=list, description="Must-haves inferred from request")
     soft_preferences: List[str] = Field(default_factory=list, description="Nice-to-haves inferred from request")
+    is_road_trip: bool = Field(default=False, description="Whether the user wants a road trip (e.g., Iceland Ring Road)")
     
     # Trace ID for observability
     trace_id: UUID = Field(default_factory=uuid4, description="Unique request trace ID")
@@ -123,6 +124,23 @@ class TravelConstraints(BaseModel):
                 "soft_preferences": ["authentic local food"]
             }
         }
+
+class Region(BaseModel):
+    """A geographic region/segment of a trip."""
+    name: str = Field(..., description="Region name (e.g., 'South Coast')")
+    base_location: str = Field(..., description="Primary town/city for lodging")
+    days: int = Field(..., ge=1, description="Number of days allocated")
+    highlights: List[str] = Field(default_factory=list, description="Key attractions in this region")
+
+
+class TripStructure(BaseModel):
+    """Output of TripStructuringAgent — defines trip skeleton before execution."""
+    trip_type: str = Field(..., description="city_trip | road_trip | multi_region")
+    regions: List[Region] = Field(..., min_length=1, description="Ordered list of regions to visit")
+    route: List[str] = Field(..., description="Ordered route of location names")
+    pace: str = Field(default="balanced", description="relaxed | balanced | aggressive")
+
+
 
 
 # ============================================================================
@@ -271,6 +289,7 @@ class LogisticsOutput(BaseModel):
     day_skeletons: List[DaySkeleton]  # Day-by-day structure
     backtracking_minimized: bool = True
     total_estimated_transit_hours: float
+    route_description: Optional[str] = Field(default=None, description="Overview of the road trip route if applicable")
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
@@ -491,6 +510,9 @@ class FinalItinerary(BaseModel):
     days: List[DayItinerary]
     neighborhoods: Dict[str, List[str]]  # City -> neighborhood suggestions
     logistics_summary: str  # Inter-city transport overview
+    strategic_insight: Optional[str] = Field(default=None, description="Why this itinerary works (strategic pacing, etc.)")
+    budget_analysis: Optional[str] = Field(default=None, description="Reality check and budget strategy")
+    cost_optimization_tips: List[str] = Field(default_factory=list, description="Practical ways to save money")
     budget_rollup: BudgetBreakdown
     review_status: ReviewStatus
     review_warnings: List[str] = Field(default_factory=list)
@@ -499,6 +521,13 @@ class FinalItinerary(BaseModel):
         description="Safety disclaimer"
     )
     generated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class PlanInsights(BaseModel):
+    """LLM-generated insights for the final itinerary."""
+    strategic_insight: str
+    budget_analysis: str
+    cost_optimization_tips: List[str]
 
 
 # ============================================================================

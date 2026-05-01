@@ -39,8 +39,11 @@ Component
 Responsibility
 Primary outputs
 Orchestrator
-Parse request → structured constraints; decompose work; merge partial plans; resolve conflicts; final narrative itinerary
+Parse request → structured constraints; manage hierarchical regions; decompose work; merge partial plans; resolve conflicts; final narrative itinerary
 TravelConstraints, task graph, merged DraftItinerary, user-facing plan
+Trip Structuring
+Determine trip type (city/road/multi-region); allocate days per region; define logical geographic progression
+TripStructure, Region[]
 Destination Research
 Places, food, temples, experiences; crowd-aware options; must-do vs nice-to-have
 ActivityCatalog, neighborhood notes, preference-aligned suggestions
@@ -54,15 +57,22 @@ Review
 Validate against constraints + realism gate
 ReviewReport (pass / fail + issues), optional RepairHints
 
-Pipeline (from problem statement):
-Orchestrator → parallel(Destination, Logistics, Budget) → Review
-The orchestrator produces a shared constraint object early; synthesis happens after parallel agents return (possibly with a second orchestrator pass if Review fails).
+Pipeline (from problem statement and improvement patch):
+Orchestrator → TripStructuringAgent → parallel per-region(Destination, Logistics, Budget) → Merge → Review → (Repair)
+The orchestrator produces a shared constraint object early. For trips > 7 days, the TripStructuringAgent breaks the trip into logical regions. The Orchestrator then synthesizes results after parallel agents return for each region (possibly with a repair loop if Review fails).
 4. Orchestration flow
-How agents “talk”: there is no Destination ↔ Logistics ↔ Budget messaging. Each specialist receives the same read-only TravelConstraints from the Orchestrator, returns one typed artifact to the Orchestrator, and only after that does the Orchestrator merge into DraftItinerary and send that (plus constraints) to Review. Review returns ReviewReport (and optional RepairHints) to the Orchestrator; repair is orchestrator-driven, not worker-to-Review.
+How agents “talk”: there is no Destination ↔ Logistics ↔ Budget messaging. The pipeline follows a hierarchical structure:
+1. The Orchestrator extracts `TravelConstraints`.
+2. The `TripStructuringAgent` creates a `TripStructure` to define geographic segments (regions).
+3. The Orchestrator creates region-specific `TravelConstraints` and passes them to the specialist agents.
+4. Each specialist returns one typed artifact per region to the Orchestrator.
+5. The Orchestrator merges these into a `DraftItinerary` and sends it to Review.
+6. Review returns `ReviewReport` (and optional `RepairHints`) to the Orchestrator. Repair is orchestrator-driven, not worker-to-Review.
+
 Communication topology (hub-and-spoke)
-Only the Orchestrator routes messages; Review never invokes workers directly—only the Orchestrator does, after interpreting ReviewReport / RepairHints.
+Only the Orchestrator routes messages; Review never invokes workers directly. The TripStructuringAgent acts as a pre-processor before the parallel execution block.
 Design notes
-Parallel agents share the same read-only TravelConstraints; they should not each re-parse the raw user string differently (avoids inconsistent duration/cities/budget).
+Parallel agents share the same read-only TravelConstraints (scaled to their specific region if applicable); they should not each re-parse the raw user string differently (avoids inconsistent duration/cities/budget).
 Merge point is orchestrator-owned: Destination suggests what; Logistics sequences when and where; Budget may trim or substitute items—conflicts resolved in one place.
 Review is a hard gate before user delivery; optional repair loop (orchestrator adjusts, re-runs Review) keeps quality without infinite loops (e.g. max 2–3 cycles).
 5. Core data model (shared artifacts)
@@ -72,6 +82,10 @@ destination_region, cities[], duration_days
 budget_total, currency
 preferences[], avoidances[] (e.g. crowds)
 hard_requirements vs soft_preferences (if inferred)
+TripStructure (TripStructuringAgent)
+trip_type: city_trip, road_trip, multi_region
+regions[]: name, base_location, allocated_days
+route[]: ordered sequence of locations
 ActivityCatalog (Destination)
 Per city: activities[] with type (temple, food, etc.), estimated_duration, crowd_level (ordinal or tag), cost_band, must_do flag, rationale
 LodgingPlan + MovementPlan (Logistics)

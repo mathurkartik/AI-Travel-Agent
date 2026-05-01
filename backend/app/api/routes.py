@@ -68,15 +68,13 @@ async def create_plan(request: Request, plan_request: PlanRequest):
         print(f"Using stub mode (LLM unavailable): {e}")
         
         processing_time_ms = int((time.time() - start_time) * 1000)
-        
-        # Extract basic info from request for personalized stub
+           # Extract basic info from request for personalized stub
         import re
         request_lower = plan_request.request.lower()
         request_text = plan_request.request
         
         # ── Extract destination ────────────────────────────────────────────
         cities = []
-        # Stopwords that should never be treated as a destination
         stop = {'the','a','an','my','our','this','that','days','day','week','weeks',
                 'month','months','trip','plan','budget','love','hate','with','and',
                 'for','about','around','in','on','at','to','of','from','like','want',
@@ -84,29 +82,24 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                 'please','help','can','should','would','could','some','any','all',
                 'i','me','we','us','it','is','am','are','be','do','have','has'}
         
-        # Strategy 1: "trip to X", "visit X", "in X", "of X", "to X"
         m = re.search(
             r'(?:trip\s+to|travel\s+to|visit|visiting|going\s+to|to|in|of)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)',
             request_text
         )
         if m:
             candidate = m.group(1).strip()
-            # If the candidate is "The Search", skip it (user noise)
             if candidate.lower() not in stop and candidate.lower() != "search" and len(candidate) > 1:
                 cities = [candidate.title()]
         
-        # Strategy 2: first capitalized word(s) not in stopwords
         if not cities:
             words = request_text.split()
             for w in words:
-                clean = w.strip('",.!?;:()[]/\\')
+                clean = w.strip('",.!?;:()[]/\\\'')
                 if clean and clean[0].isupper() and clean.lower() not in stop and len(clean) > 1:
-                    # Specific check for "The Search" or "Search" noise
                     if clean.lower() == "search": continue
                     cities = [clean.title()]
                     break
         
-        # Strategy 3: find any word > 3 chars not in stop (best guess)
         if not cities:
             for w in request_text.split():
                 clean = w.strip(',.!?;:')
@@ -115,7 +108,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                     break
         
         if not cities:
-            cities = ["World"]  # absolute last resort
+            cities = ["World"]
         
         # ── Extract duration ───────────────────────────────────────────────
         duration = 5
@@ -128,12 +121,11 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                 duration = int(days_match.group(1))
         
         # ── Extract budget ─────────────────────────────────────────────────
-        # Supports: $3000, 1500000 budget, budget 50000, "50000 INR", etc.
-        budget = 50000  # default INR
+        budget = 50000
         budget_patterns = [
-            r'[\$€£₹]\s*([\d,]+)',               # $3000, ₹50000
-            r'([\d,]+)\s*(?:INR|USD|EUR|GBP|budget)',  # 1500000 INR / 1500000 budget
-            r'budget\s*[\$€£₹]?\s*([\d,]+)',      # budget 50000
+            r'[\$€£₹]\s*([\d,]+)',
+            r'([\d,]+)\s*(?:INR|USD|EUR|GBP|budget)',
+            r'budget\s*[\$€£₹]?\s*([\d,]+)',
         ]
         for pat in budget_patterns:
             bm = re.search(pat, request_text, re.IGNORECASE)
@@ -141,155 +133,180 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                 budget = int(bm.group(1).replace(',', ''))
                 break
 
-        
         primary_city = cities[0]
+        dest_lower = primary_city.lower()
         
-        # Create rich narrative stub constraints
+        # ── Route-aware stop generation ────────────────────────────────────
+        ROAD_TRIP_ROUTES = {
+            "iceland": ["Reykjavik", "Golden Circle", "Vik", "Skaftafell", "Hofn", "Egilsstadir", "Akureyri", "Snaefellsnes"],
+            "norway": ["Oslo", "Bergen", "Flam", "Geiranger", "Alesund", "Tromso"],
+            "new zealand": ["Auckland", "Rotorua", "Taupo", "Wellington", "Queenstown", "Milford Sound", "Wanaka"],
+            "scotland": ["Edinburgh", "Highlands", "Isle of Skye", "Inverness", "Glencoe", "Glasgow"],
+            "ireland": ["Dublin", "Galway", "Cliffs of Moher", "Ring of Kerry", "Cork", "Killarney"],
+            "portugal": ["Lisbon", "Sintra", "Porto", "Douro Valley", "Algarve"],
+            "switzerland": ["Zurich", "Lucerne", "Interlaken", "Zermatt", "Geneva"],
+        }
+        
+        ROUTE_DAY_THEMES = {
+            "iceland": [
+                ("Reykjavik", "Reykjavik City Exploration", "Explore Hallgrimskirkja church, the harbor area, and Laugavegur shopping street. Visit the Harpa Concert Hall and enjoy local seafood at a downtown restaurant."),
+                ("Golden Circle", "Golden Circle Day Trip", "Drive the famous Golden Circle route: Thingvellir National Park (UNESCO site where tectonic plates meet), Geysir geothermal area with erupting Strokkur, and the magnificent Gullfoss waterfall."),
+                ("Blue Lagoon", "Blue Lagoon & Reykjanes Peninsula", "Visit the iconic Blue Lagoon geothermal spa. Explore the volcanic Reykjanes Peninsula with its lava fields, hot springs, and dramatic coastal cliffs."),
+                ("South Coast", "South Coast Waterfalls", "Drive the scenic South Coast. Stop at Seljalandsfoss (walk behind the waterfall) and Skogafoss (climb 527 steps for panoramic views). Visit the Skogar Folk Museum."),
+                ("Vik", "Black Sand Beach & Vik Village", "Explore Reynisfjara black sand beach with its basalt columns and sea stacks. Visit the charming village of Vik and hike to the Dyrholaey arch for puffin spotting."),
+                ("Skaftafell", "Glacier Hiking & Ice Caves", "Hike on Skaftafell glacier in Vatnajokull National Park. Take a guided ice cave tour (seasonal). Visit Svartifoss waterfall surrounded by basalt columns."),
+                ("Jokulsarlon", "Glacier Lagoon & Diamond Beach", "Visit Jokulsarlon glacier lagoon and take an amphibian boat tour among floating icebergs. Walk along Diamond Beach where ice chunks wash ashore on black sand."),
+                ("Hofn", "East Iceland & Fjords Drive", "Drive through the dramatic East Fjords. Stop at fishing villages and scenic viewpoints. Enjoy fresh langoustine (lobster) in Hofn, the lobster capital of Iceland."),
+                ("Egilsstadir", "Seydisfjordur & East Iceland", "Visit the colorful town of Seydisfjordur with its rainbow road and Nordic architecture. Explore Lagarfljot lake and the surrounding wilderness."),
+                ("Myvatn", "Lake Myvatn Geothermal Wonders", "Explore the otherworldly Lake Myvatn area: Dimmuborgir lava formations, Grjotagja cave, Hverir geothermal mud pots, and relax at Myvatn Nature Baths."),
+                ("Akureyri", "North Iceland & Whale Watching", "Visit Akureyri, the capital of the north. Take a whale watching tour from Husavik. See Godafoss (Waterfall of the Gods) and explore the Arctic botanical garden."),
+                ("Dettifoss", "Dettifoss & Asbyrgi Canyon", "Visit Dettifoss, Europe's most powerful waterfall. Explore the horseshoe-shaped Asbyrgi canyon and the volcanic landscapes of Jokulsargljufur."),
+                ("Snaefellsnes", "Snaefellsnes Peninsula", "Explore the 'Mini Iceland' peninsula: Kirkjufell mountain (most photographed), Arnarstapi coastal cliffs, Djupalonssandur black pebble beach, and Snaefellsjokull glacier."),
+                ("Borgarnes", "West Iceland & Settlement Center", "Visit the Settlement Center in Borgarnes. Explore Hraunfossar and Barnafoss waterfalls. Discover Deildartunguhver, Europe's most powerful hot spring."),
+                ("Reykjavik", "Return & Farewell", "Return to Reykjavik. Last-minute shopping on Laugavegur street. Visit any missed city attractions. Enjoy a farewell dinner at a top Reykjavik restaurant."),
+            ],
+        }
+        
+        # Detect if this is a road trip destination
+        is_road_trip = dest_lower in ROAD_TRIP_ROUTES
+        if is_road_trip:
+            route_stops = ROAD_TRIP_ROUTES[dest_lower]
+            cities = route_stops[:min(6, len(route_stops))]
+        
         stub_constraints = TravelConstraints(
-            destination_region=f"{primary_city} Region (stub mode)",
+            destination_region=primary_city,
             cities=cities,
             duration_days=duration,
             budget_total=budget,
             currency="INR",
-            preferences=["Cultural experiences", "Local cuisine", "Sightseeing"],
+            preferences=["Nature", "Scenic drives", "Local cuisine", "Adventure"] if is_road_trip else ["Cultural experiences", "Local cuisine", "Sightseeing"],
             avoidances=[],
             hard_requirements=[],
-            soft_preferences=[]
+            soft_preferences=[],
+            is_road_trip=is_road_trip,
         )
         
-        # Generate rich narrative days based on extracted info
+        # ── Generate varied days ───────────────────────────────────────────
         stub_days = []
+        day_themes = ROUTE_DAY_THEMES.get(dest_lower, [])
+        
         for day_num in range(1, duration + 1):
             if day_num == 1:
                 day_items = [
-                    DayItineraryItem(
-                        slot_index=0,
-                        time="09:00 - 12:00",
+                    DayItineraryItem(slot_index=0, time="09:00 - 14:00",
                         activity_id=f"arrival-{day_num}",
-                        activity_name=f"Arrival in {primary_city}. Welcome to your destination.",
-                        city=primary_city,
-                        type=ActivityType.OTHER,
-                        cost_estimate=0.0,
-                        notes=f"Arrive at {primary_city} International Airport. Complete immigration and collect baggage. Meet your representative for transfers to the hotel. Check-in and rest for the day. Overnight stay in {primary_city}."
-                    ),
-                    DayItineraryItem(
-                        slot_index=1,
-                        time="14:00 - 18:00",
-                        activity_id=f"explore-{day_num}",
-                        activity_name=f"Welcome to {primary_city} - City Orientation",
-                        city=primary_city,
-                        type=ActivityType.OTHER,
-                        cost_estimate=0.0,
-                        notes=f"Wake up to a pleasant morning and have your breakfast at the hotel. Take a leisurely walk around your hotel neighborhood to get acquainted with {primary_city}. Explore nearby cafes, local shops, and get a feel for the city's atmosphere."
-                    ),
+                        activity_name=f"Arrival in {cities[0]}",
+                        city=cities[0], type=ActivityType.OTHER, cost_estimate=0.0,
+                        notes=f"Arrive at {cities[0]} airport. Pick up rental car (if road trip) or transfer to hotel. Check-in, rest, and explore the immediate neighborhood."),
+                    DayItineraryItem(slot_index=1, time="15:00 - 20:00",
+                        activity_id=f"orient-{day_num}",
+                        activity_name=f"{cities[0]} Orientation & First Impressions",
+                        city=cities[0], type=ActivityType.OTHER, cost_estimate=0.0,
+                        notes=f"Take a leisurely walk through {cities[0]}. Visit a local cafe, explore the main streets, and enjoy your first dinner at a highly-rated local restaurant."),
                 ]
-                day_summary = f"Arrival in {primary_city}"
-                day_cost = 0.0  # Must match sum of item cost_estimates
+                day_summary = f"Arrival & Orientation in {cities[0]}"
+                day_cost = 0.0
+                day_city = cities[0]
             elif day_num == duration:
                 day_items = [
-                    DayItineraryItem(
-                        slot_index=0,
-                        time="09:00 - 12:00",
+                    DayItineraryItem(slot_index=0, time="09:00 - 12:00",
                         activity_id=f"final-{day_num}",
-                        activity_name=f"Last Minute Exploration and Souvenirs",
-                        city=primary_city,
-                        type=ActivityType.SHOPPING,
-                        cost_estimate=0.0,
-                        notes=f"Wake up to a pleasant morning and have your breakfast at the hotel. Visit local markets or shopping districts for last-minute souvenirs. Take final photos of {primary_city} landmarks."
-                    ),
-                    DayItineraryItem(
-                        slot_index=1,
-                        time="14:00 - 18:00",
+                        activity_name="Last Explorations & Souvenirs",
+                        city=cities[0], type=ActivityType.SHOPPING, cost_estimate=0.0,
+                        notes=f"Final morning in {primary_city}. Pick up souvenirs, visit any remaining spots, and take farewell photos."),
+                    DayItineraryItem(slot_index=1, time="13:00 - 18:00",
                         activity_id=f"departure-{day_num}",
-                        activity_name=f"Departure. Take a bag of happy memories.",
-                        city=primary_city,
-                        type=ActivityType.TRANSPORT,
-                        cost_estimate=0.0,
-                        notes=f"Get ready and board your transfers to the airport. Your amazing {primary_city} trip concludes once you are dropped off at the airport for your onward journey. Depart with cultural experiences, scenic pictures, and happy memories."
-                    ),
+                        activity_name="Departure",
+                        city=cities[0], type=ActivityType.TRANSPORT, cost_estimate=0.0,
+                        notes=f"Transfer to the airport. Depart with incredible memories of your {primary_city} adventure."),
                 ]
-                day_summary = f"Departure from {primary_city}"
-                day_cost = 0.0  # Must match sum of item cost_estimates (0.0 + 0.0)
-            else:
-                # Middle days with rich narratives
+                day_summary = f"Departure from {cities[0]}"
+                day_cost = 0.0
+                day_city = cities[0]
+            elif day_themes and (day_num - 2) < len(day_themes):
+                # Use destination-specific themed days
+                theme = day_themes[day_num - 2]
+                region, title, description = theme[0], theme[1], theme[2]
+                day_city = region
                 day_items = [
-                    DayItineraryItem(
-                        slot_index=0,
-                        time="09:00 - 13:00",
-                        activity_id=f"sightseeing-{day_num}",
-                        activity_name=f"{primary_city} Cultural and Historic Tour",
-                        city=primary_city,
-                        type=ActivityType.MUSEUM,
-                        cost_estimate=30.0,
-                        notes=f"Wake up to a pleasant morning and have your breakfast at the hotel. Today, board your transfers to explore {primary_city}'s famous cultural sites and historic landmarks. Visit iconic museums, monuments, and architectural wonders. Learn about the city's rich history and heritage from your guide."
-                    ),
-                    DayItineraryItem(
-                        slot_index=1,
-                        time="14:00 - 18:00",
-                        activity_id=f"experience-{day_num}",
-                        activity_name=f"Local Experiences and Cuisine",
-                        city=primary_city,
-                        type=ActivityType.FOOD,
-                        cost_estimate=50.0,
-                        notes=f"Enjoy lunch at a local restaurant featuring authentic {primary_city} cuisine. Continue exploring neighborhoods, visit local markets, and experience the city's vibrant culture. Take plenty of photos and soak in the atmosphere. Return to hotel for overnight stay."
-                    ),
+                    DayItineraryItem(slot_index=0, time="08:00 - 13:00",
+                        activity_id=f"morning-{day_num}",
+                        activity_name=title,
+                        city=region, type=ActivityType.NATURE, cost_estimate=40.0,
+                        notes=description),
+                    DayItineraryItem(slot_index=1, time="14:00 - 19:00",
+                        activity_id=f"afternoon-{day_num}",
+                        activity_name=f"Afternoon in {region}",
+                        city=region, type=ActivityType.FOOD, cost_estimate=40.0,
+                        notes=f"Enjoy lunch featuring local {primary_city} cuisine. Continue exploring the {region} area. Capture photos of the dramatic landscapes. Drive to your evening accommodation."),
                 ]
-                day_summary = f"Explore {primary_city} - Day {day_num}"
-                day_cost = 80.0  # Matches sum: 30.0 + 50.0
+                day_summary = f"Day {day_num}: {title}"
+                day_cost = 80.0
+            else:
+                # Varied generic days (rotate themes)
+                themes = [
+                    ("Nature & Scenic Exploration", ActivityType.NATURE, f"Explore the natural landscapes around {primary_city}. Hike trails, visit viewpoints, and discover hidden waterfalls or coastline."),
+                    ("Cultural Heritage & Museums", ActivityType.MUSEUM, f"Visit {primary_city}'s most important museums and cultural sites. Learn about local history, art, and traditions."),
+                    ("Local Markets & Food Tour", ActivityType.FOOD, f"Spend the day exploring local food markets, trying street food, and visiting artisan shops in {primary_city}."),
+                    ("Adventure & Outdoor Activities", ActivityType.NATURE, f"Engage in outdoor activities: hiking, cycling, kayaking, or guided nature walks in the {primary_city} region."),
+                    ("Neighborhoods & Hidden Gems", ActivityType.OTHER, f"Explore lesser-known neighborhoods and off-the-beaten-path attractions in {primary_city}."),
+                ]
+                theme_idx = (day_num - 2) % len(themes)
+                title, atype, desc = themes[theme_idx]
+                day_city = cities[min(day_num % len(cities), len(cities) - 1)] if is_road_trip else primary_city
+                day_items = [
+                    DayItineraryItem(slot_index=0, time="09:00 - 13:00",
+                        activity_id=f"explore-{day_num}",
+                        activity_name=f"{day_city}: {title}",
+                        city=day_city, type=atype, cost_estimate=40.0,
+                        notes=desc),
+                    DayItineraryItem(slot_index=1, time="14:00 - 18:00",
+                        activity_id=f"evening-{day_num}",
+                        activity_name=f"Evening in {day_city}",
+                        city=day_city, type=ActivityType.FOOD, cost_estimate=40.0,
+                        notes=f"Enjoy local dining and evening atmosphere in {day_city}. Return to accommodation for overnight stay."),
+                ]
+                day_summary = f"Day {day_num}: {title} in {day_city}"
+                day_cost = 80.0
             
             stub_days.append(DayItinerary(
-                day_number=day_num,
-                city=primary_city,
-                items=day_items,
-                day_summary=day_summary,
-                day_cost=day_cost,
-                lodging_area=f"{primary_city} City Center"
+                day_number=day_num, city=day_city,
+                items=day_items, day_summary=day_summary,
+                day_cost=day_cost, lodging_area=f"{day_city} area"
             ))
         
-        # Calculate total cost
         total_cost = sum(d.day_cost for d in stub_days)
+        
+        # Regional pricing
+        daily_rate = {"iceland": 18000, "norway": 16000, "switzerland": 17000,
+                      "new zealand": 12000, "japan": 10000}.get(dest_lower, 12000)
+        
+        neighborhoods = {}
+        for c in cities:
+            neighborhoods[c] = [f"Central {c}", f"{c} area"]
         
         stub_itinerary = FinalItinerary(
             constraints=stub_constraints,
             days=stub_days,
-            neighborhoods={
-                primary_city: ["City Center", "Historic District"]
-            },
-            logistics_summary=f"Explore {primary_city} - transfers and local transport",
+            neighborhoods=neighborhoods,
+            logistics_summary=("Ring Road self-drive route" if is_road_trip else f"Explore {primary_city} with local transport"),
+            strategic_insight=(f"This {duration}-day itinerary covers the full {primary_city} Ring Road route with balanced pacing — no burnout, maximum coverage." if is_road_trip and dest_lower == "iceland" else None),
+            budget_analysis=f"Your budget of {budget:,} INR for {duration} days is {'comfortable for a mid-range experience' if budget >= duration * daily_rate * 0.8 else 'tight — consider budget accommodations'}.",
+            cost_optimization_tips=["Book accommodation early for best rates", "Cook some meals if self-catering available", "Look for free natural attractions"] if is_road_trip else ["Use public transport over taxis", "Eat at local restaurants instead of tourist spots"],
             budget_rollup=BudgetBreakdown(
                 categories=[
-                    BudgetCategory(
-                        category="stay",
-                        estimated_total=duration * 5000.0,
-                        currency="INR",
-                        notes=f"{duration} nights in {primary_city} (mid-range)"
-                    ),
-                    BudgetCategory(
-                        category="food",
-                        estimated_total=duration * 2500.0,
-                        currency="INR",
-                        notes="Daily meals and local cuisine"
-                    ),
-                    BudgetCategory(
-                        category="activities",
-                        estimated_total=duration * 3000.0,
-                        currency="INR",
-                        notes="Attractions and experiences"
-                    ),
-                    BudgetCategory(
-                        category="transport",
-                        estimated_total=duration * 1500.0,
-                        currency="INR",
-                        notes="Local transport and transfers"
-                    ),
+                    BudgetCategory(category="stay", estimated_total=duration * daily_rate * 0.35, currency="INR", notes=f"{duration} nights ({primary_city} region)"),
+                    BudgetCategory(category="food", estimated_total=duration * daily_rate * 0.2, currency="INR", notes="Daily meals"),
+                    BudgetCategory(category="activities", estimated_total=duration * daily_rate * 0.2, currency="INR", notes="Attractions and experiences"),
+                    BudgetCategory(category="transport", estimated_total=duration * daily_rate * 0.25, currency="INR", notes=("SUV rental + fuel" if is_road_trip else "Local transport")),
                 ],
-                grand_total=duration * 12000.0,
+                grand_total=duration * daily_rate,
                 currency="INR",
-                within_budget=budget >= (duration * 12000.0),
-                remaining_buffer=max(0, budget - (duration * 12000.0))
+                within_budget=budget >= (duration * daily_rate),
+                remaining_buffer=max(0, budget - (duration * daily_rate))
             ),
             review_status=ReviewStatus.PASS,
-            disclaimer="This is a stub response with narrative-style itineraries. Set GROQ_API_KEY for LLM-powered detailed extraction and full orchestration with real-time data."
+            disclaimer="Stub mode — set GROQ_API_KEY for full LLM-powered itineraries with real landmark data."
         )
         
         return PlanResponse(
@@ -300,6 +317,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
             processing_time_ms=processing_time_ms,
             used_stub_mode=True
         )
+
 
 
 @router.get("/plan/{plan_id}", tags=["Planning"])

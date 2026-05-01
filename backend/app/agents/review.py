@@ -181,6 +181,36 @@ class ReviewAgent:
                 message="All day numbers are unique"
             ))
         
+        day_cities = [d.city for d in draft.days]
+        # Check for route/city variety for long trips
+        if len(draft.days) > 7:
+            # Geographic spread
+            if len(set(day_cities)) < 2:
+                checks.append(ChecklistItem(
+                    check="geographic_progression",
+                    passed=False,
+                    expected="multiple regions for long trip",
+                    actual="all days in one city",
+                    severity=ReviewSeverity.ADVISORY,
+                    message="Trip > 7 days should include multiple regions"
+                ))
+            
+            # Repetitive day check (simple heuristic)
+            activity_types = []
+            for day in draft.days:
+                types = [i.type for i in day.items if i.type]
+                activity_types.append(tuple(types))
+            
+            if len(set(activity_types)) == 1 and len(draft.days) > 3:
+                checks.append(ChecklistItem(
+                    check="day_diversity",
+                    passed=False,
+                    expected="varied day structures",
+                    actual="identical daily structure",
+                    severity=ReviewSeverity.ADVISORY,
+                    message="Highly repetitive daily activities detected"
+                ))
+        
         return checks
     
     async def _llm_qualitative_check(

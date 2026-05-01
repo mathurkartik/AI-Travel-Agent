@@ -144,25 +144,40 @@ class GroqClient:
 Respond with valid JSON matching this schema:
 {
   "destination_region": "Country or region name",
-  "cities": ["City1", "City2"],
+  "cities": ["Stop1", "Stop2", ...],
   "duration_days": number,
   "budget_total": number,
   "currency": "3-letter code like INR, USD, EUR (default to INR)",
   "preferences": ["what they want to experience"],
   "avoidances": ["what they want to avoid"],
   "hard_requirements": ["must-haves inferred from request"],
-  "soft_preferences": ["nice-to-haves inferred"]
+  "soft_preferences": ["nice-to-haves inferred"],
+  "is_road_trip": boolean
 }
 
 CRITICAL RULES:
 - Extract the destination EXACTLY as the user mentions it
-- If the user mentions a country but no cities, infer 1-2 major cities (e.g., the capital) to ensure a valid itinerary
-- If specific cities are named, include ONLY those cities
-- If user says "Switzerland", destination_region is "Switzerland" and cities might be ["Zurich", "Lucerne"]
+- "cities" means route stops OR cities depending on trip type. Generate enough to cover the full trip.
+
+TRIP TYPE DETECTION:
+- ROAD TRIP countries (Iceland, Norway, New Zealand, Scotland, Ireland, Portugal coast, South Africa Garden Route, Australia outback):
+  Set is_road_trip=true. Generate 4-8 ROUTE STOPS (regions/towns along the route), NOT just the capital.
+  Example Iceland 15 days: cities=["Reykjavik","Vik","Hofn","Egilsstadir","Akureyri","Snaefellsnes"] (Ring Road stops)
+  Example Norway 10 days: cities=["Oslo","Bergen","Geiranger","Alesund","Tromso"]
+  Example New Zealand 14 days: cities=["Auckland","Rotorua","Wellington","Queenstown","Milford Sound"]
+
+- CITY TRIP destinations (Paris, Tokyo, NYC, Dubai, Singapore):
+  Set is_road_trip=false. Use 1-3 cities as appropriate.
+
+- MULTI-CITY countries (Japan, Italy, Spain):
+  Set is_road_trip=false. Generate 2-4 key cities based on duration.
+  Example Japan 7 days: cities=["Tokyo","Kyoto","Osaka"]
+
 - Duration: count nights + 1 if not specified
 - Budget: default to 50000 INR if not mentioned
-- Preferences: align with what they want (food, temples, nature, etc.)
-- Avoidances: capture dislikes (crowds, tourist traps, etc.)"""
+- Preferences: include nature, adventure, scenic drives, glaciers, waterfalls etc. based on destination character
+- For road trips: add "self-drive", "scenic routes", "nature" to preferences automatically
+"""
 
         try:
             response = self._client.chat.completions.create(

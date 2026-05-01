@@ -5,7 +5,7 @@ The deliverable includes a backend (HTTP API + multi-agent runtime) and a fronte
 Guiding principles
 Constraints first: One orchestrator pass extracts TravelConstraints; worker agents never re-parse the raw user string as the source of truth for duration, cities, or budget.
 Typed artifacts: Implement shared schemas (e.g. Pydantic / JSON Schema) before wiring LLM prompts; share the same contract with the frontend (OpenAPI codegen, shared package, or duplicated types checked in CI).
-Pipeline: Orchestrator → parallel(Destination, Logistics, Budget) → merge → Review → (optional repair) → user.
+Pipeline: Orchestrator → TripStructuringAgent → parallel per-region(Destination, Logistics, Budget) → merge → Review → (optional repair) → user.
 Backend owns intelligence: LLM keys, agents, and tools run only on the server.
 Frontend owns experience: Input, loading and error states, structured rendering of the plan and disclaimer; no secrets in the browser.
 Scope: Educational / PM-demo quality (problem statement); illustrative pricing and logistics, not production booking.
@@ -79,10 +79,11 @@ Tests with mocked LLM returning canned JSON to keep CI deterministic.
 Exit criteria
 For a fixed TravelConstraints fixture, all three agents produce valid artifacts (integration test with mocks).
 
-Phase 5 — Orchestrator merge and parallel execution
-Goal: Implement the core pipeline segment: parallel workers → DraftItinerary (architecture §4, §6).
+Phase 5 — Hierarchical Structuring, Parallel Execution, and Merge
+Goal: Implement the core pipeline segment: Trip Structuring → parallel workers → DraftItinerary (architecture §4, §6).
 Tasks
-Run Destination, Logistics, Budget concurrently (async or thread pool) with the same read-only TravelConstraints.
+Run TripStructuringAgent to break trips >7 days into logical geographic regions.
+Run Destination, Logistics, Budget concurrently (async or thread pool) for each region, passing proportionally scaled TravelConstraints.
 Implement merge(catalog, logistics, budget) -> DraftItinerary: resolve conflicts (what vs when vs cost); attach budget summary; link slots to catalog IDs.
 Optional: second Budget pass on full draft if architecture calls for tighter numbers.
 Exit criteria
@@ -163,7 +164,7 @@ M5
 “Stable PM-ready demo” (API + docs)
 M6
 0–9
-“Full-stack demo” (browser UI + backend)
+“Full-stack global demo” (browser UI + backend + worldwide rendering)
 
 
 Dependency graph (summary)

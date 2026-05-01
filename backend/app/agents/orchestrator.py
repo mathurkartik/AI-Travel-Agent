@@ -12,13 +12,15 @@ from typing import Optional, List, Dict, Any
 from ..models import (
     TravelConstraints, DraftItinerary, FinalItinerary, ReviewReport,
     ActivityCatalog, LogisticsOutput, BudgetBreakdown, DayItinerary,
-    DayItineraryItem, BudgetCategory, ActivityType
+    DayItineraryItem, BudgetCategory, ActivityType, PlanInsights,
+    TripStructure, Region
 )
 from ..config import get_settings
 from .destination import DestinationAgent
 from .logistics import LogisticsAgent
 from .budget import BudgetAgent
 from .review import ReviewAgent
+from .trip_structuring import TripStructuringAgent
 from ..tools import ToolRouter
 from ..utils.observability import ObservabilityLogger
 
@@ -59,6 +61,7 @@ class OrchestratorAgent:
         self.logistics_agent = LogisticsAgent(tool_router=tool_router, llm_client=self.llm_client)
         self.budget_agent = BudgetAgent(tool_router=tool_router, llm_client=self.llm_client)
         self.review_agent = ReviewAgent(llm_client=self.llm_client)  # Phase 6
+        self.trip_structuring_agent = TripStructuringAgent(llm_client=self.llm_client)
     
     async def extract_constraints(self, natural_language_request: str) -> TravelConstraints:
         """
@@ -132,67 +135,40 @@ class OrchestratorAgent:
             )
             raise RuntimeError(f"Constraint extraction timed out after {timeout_seconds}s")
         
-        # Step 2: Run destination agent first with timeout and partial failure handling
-        activity_catalog = None
-        try:
-            activity_catalog = await asyncio.wait_for(
-                self.destination_agent.research(constraints),
-                timeout=timeout_seconds
-            )
-        except asyncio.TimeoutError:
-            ObservabilityLogger.log_partial_failure(
-                trace_id, "destination_agent",
-                "use_empty_catalog", "Destination research timed out, using empty catalog"
-            )
-            # Use static fallback catalog instead of empty
-            activity_catalog = self.destination_agent._get_static_catalog_for_constraints(constraints)
-        except Exception as e:
-            ObservabilityLogger.log_partial_failure(
-                trace_id, "destination_agent",
-                "use_static_catalog", f"Destination research failed: {str(e)[:100]}"
-            )
-            # Use static fallback catalog instead of empty
-            activity_catalog = self.destination_agent._get_static_catalog_for_constraints(constraints)
+        # Step 1.5: Trip Structuring (NEW - from improvement.md)
+        trip_structure = None
+        use_structuring = constraints.duration_days > 7 or constraints.is_road_trip
         
-        # Step 3: Run logistics and budget in parallel with timeout
-        logistics_task = self._run_logistics_with_timeout(constraints, activity_catalog, timeout_seconds, trace_id)
-        budget_task = self._run_budget_with_timeout(constraints, timeout_seconds, trace_id)
+        if use_structuring:
+            try:
+                trip_structure = await self.trip_structuring_agent.structure(constraints)
+                print(f"Trip structured: {trip_structure.trip_type}, {len(trip_structure.regions)} regions, pace={trip_structure.pace}")
+                # Update constraints cities from trip structure route
+                structured_cities = [r.base_location for r in trip_structure.regions]
+                constraints = TravelConstraints(
+                    destination_region=constraints.destination_region,
+                    cities=structured_cities,
+                    duration_days=constraints.duration_days,
+                    budget_total=constraints.budget_total,
+                    currency=constraints.currency,
+                    preferences=constraints.preferences,
+                    avoidances=constraints.avoidances,
+                    hard_requirements=constraints.hard_requirements,
+                    soft_preferences=constraints.soft_preferences,
+                    is_road_trip=constraints.is_road_trip or trip_structure.trip_type == "road_trip",
+                )
+            except Exception as e:
+                print(f"Trip structuring failed, using flat pipeline: {e}")
+                trip_structure = None
         
-        logistics_output, budget_breakdown = await asyncio.gather(
-            logistics_task,
-            budget_task,
-            return_exceptions=True
-        )
-        
-        # Phase 8: Handle partial failures gracefully
-        if isinstance(logistics_output, Exception):
-            ObservabilityLogger.log_partial_failure(
-                trace_id, "logistics_agent",
-                "use_minimal_skeleton", f"Logistics failed: {str(logistics_output)[:100]}"
+        # Step 2: Run agents (per-region if structured, flat otherwise)
+        if trip_structure and len(trip_structure.regions) > 1:
+            activity_catalog, logistics_output, budget_breakdown = await self._run_agents_per_region(
+                constraints, trip_structure, timeout_seconds, trace_id
             )
-            # Create minimal logistics output
-            from ..models import LogisticsOutput, DaySkeleton
-            logistics_output = LogisticsOutput(
-                lodging_plans=[],
-                movement_plans=[],
-                day_skeletons=[],
-                total_estimated_transit_hours=0.0,
-                logistics_summary="Minimal fallback - logistics unavailable"
-            )
-        
-        if isinstance(budget_breakdown, Exception):
-            ObservabilityLogger.log_partial_failure(
-                trace_id, "budget_agent",
-                "use_estimate", f"Budget analysis failed: {str(budget_breakdown)[:100]}"
-            )
-            # Create default budget breakdown
-            from ..models import BudgetBreakdown
-            budget_breakdown = BudgetBreakdown(
-                categories=[],
-                grand_total=0.0,
-                currency=constraints.currency,
-                within_budget=True,
-                remaining_buffer=constraints.budget_total
+        else:
+            activity_catalog, logistics_output, budget_breakdown = await self._run_agents_flat(
+                constraints, timeout_seconds, trace_id
             )
         
         # Step 4: Merge outputs into DraftItinerary
@@ -280,13 +256,17 @@ class OrchestratorAgent:
         if review_report.overall_status == "fail":
             print(f"Warning: Max repair cycles ({max_repair_cycles}) reached. Returning best-effort plan.")
         
-        # Step 6: Create FinalItinerary from Draft with Review status and disclaimer
+        # Step 6: Generate insights (Strategic + Budget Reality Check)
+        insights = await self._generate_insights(constraints, draft)
+        
+        # Step 7: Create FinalItinerary from Draft with Review status, insights, and disclaimer
         final_itinerary = self._draft_to_final(
             draft=draft,
             constraints=constraints,
             budget_breakdown=budget_breakdown,
             review_report=review_report,
-            repair_cycles=repair_count
+            repair_cycles=repair_count,
+            insights=insights
         )
         
         # Phase 8: Log plan completion
@@ -303,6 +283,137 @@ class OrchestratorAgent:
         )
         
         return final_itinerary
+    
+    async def _run_agents_flat(self, constraints, timeout_seconds, trace_id):
+        """Original flat pipeline — runs all agents once on full constraints."""
+        # Destination
+        activity_catalog = None
+        try:
+            activity_catalog = await asyncio.wait_for(
+                self.destination_agent.research(constraints),
+                timeout=timeout_seconds
+            )
+        except Exception as e:
+            ObservabilityLogger.log_partial_failure(
+                trace_id, "destination_agent", "use_static_catalog", str(e)[:100]
+            )
+            activity_catalog = self.destination_agent._get_static_catalog_for_constraints(constraints)
+        
+        # Logistics + Budget in parallel
+        logistics_task = self._run_logistics_with_timeout(constraints, activity_catalog, timeout_seconds, trace_id)
+        budget_task = self._run_budget_with_timeout(constraints, timeout_seconds, trace_id)
+        logistics_output, budget_breakdown = await asyncio.gather(logistics_task, budget_task, return_exceptions=True)
+        
+        if isinstance(logistics_output, Exception):
+            from ..models import LogisticsOutput
+            logistics_output = LogisticsOutput(
+                lodging_plans=[], movement_plans=[], day_skeletons=[],
+                total_estimated_transit_hours=0.0,
+                logistics_summary="Fallback - logistics unavailable"
+            )
+        if isinstance(budget_breakdown, Exception):
+            from ..models import BudgetBreakdown
+            budget_breakdown = BudgetBreakdown(
+                categories=[], grand_total=0.0, currency=constraints.currency,
+                within_budget=True, remaining_buffer=constraints.budget_total
+            )
+        
+        return activity_catalog, logistics_output, budget_breakdown
+    
+    async def _run_agents_per_region(self, constraints, trip_structure, timeout_seconds, trace_id):
+        """NEW: Run agents per-region, then merge results. From improvement.md."""
+        from ..models import LogisticsOutput, ActivityCatalog, Activity, BudgetBreakdown, BudgetCategory
+        
+        all_activities = []
+        all_categories = []
+        all_movement_plans = []
+        all_lodging_plans = []
+        all_day_skeletons = []
+        grand_total = 0.0
+        total_transit = 0.0
+        per_city = {}
+        neighborhood_notes = {}
+        
+        for region in trip_structure.regions:
+            print(f"  Processing region: {region.name} ({region.days} days)")
+            
+            # Create region-scoped constraints
+            region_constraints = TravelConstraints(
+                destination_region=constraints.destination_region,
+                cities=[region.base_location],
+                duration_days=region.days,
+                budget_total=constraints.budget_total * (region.days / constraints.duration_days),
+                currency=constraints.currency,
+                preferences=constraints.preferences,
+                avoidances=constraints.avoidances,
+                hard_requirements=constraints.hard_requirements,
+                soft_preferences=constraints.soft_preferences,
+                is_road_trip=constraints.is_road_trip,
+            )
+            
+            # Run destination for this region
+            try:
+                region_catalog = await asyncio.wait_for(
+                    self.destination_agent.research(region_constraints),
+                    timeout=timeout_seconds
+                )
+                all_activities.extend(region_catalog.activities)
+                per_city.update(region_catalog.per_city)
+                neighborhood_notes.update(region_catalog.neighborhood_notes)
+            except Exception as e:
+                print(f"  Region {region.name} destination failed: {e}")
+                region_catalog = self.destination_agent._get_static_catalog_for_constraints(region_constraints)
+                all_activities.extend(region_catalog.activities)
+                per_city.update(region_catalog.per_city)
+            
+            # Run budget for this region
+            try:
+                region_budget = await asyncio.wait_for(
+                    self.budget_agent.analyze(region_constraints),
+                    timeout=timeout_seconds
+                )
+                all_categories.extend(region_budget.categories)
+                grand_total += region_budget.grand_total
+            except Exception as e:
+                print(f"  Region {region.name} budget failed: {e}")
+            
+            # Run logistics for this region
+            try:
+                region_logistics = await asyncio.wait_for(
+                    self.logistics_agent.plan(region_constraints, region_catalog),
+                    timeout=timeout_seconds
+                )
+                all_lodging_plans.extend(region_logistics.lodging_plans)
+                all_movement_plans.extend(region_logistics.movement_plans)
+                all_day_skeletons.extend(region_logistics.day_skeletons)
+                total_transit += region_logistics.total_estimated_transit_hours
+            except Exception as e:
+                print(f"  Region {region.name} logistics failed: {e}")
+        
+        # Merge all region results
+        activity_catalog = ActivityCatalog(
+            activities=all_activities,
+            per_city=per_city,
+            neighborhood_notes=neighborhood_notes
+        )
+        
+        logistics_output = LogisticsOutput(
+            lodging_plans=all_lodging_plans,
+            movement_plans=all_movement_plans,
+            day_skeletons=all_day_skeletons,
+            total_estimated_transit_hours=total_transit,
+            logistics_summary=f"Route: {' → '.join(trip_structure.route)}"
+        )
+        
+        budget_breakdown = BudgetBreakdown(
+            categories=all_categories,
+            grand_total=round(grand_total, 2),
+            currency=constraints.currency,
+            within_budget=grand_total <= constraints.budget_total,
+            remaining_buffer=round(max(0, constraints.budget_total - grand_total), 2)
+        )
+        
+        return activity_catalog, logistics_output, budget_breakdown
     
     async def _run_logistics_with_timeout(self, constraints, activity_catalog, timeout_seconds, trace_id):
         """Run logistics agent with timeout and observability."""
@@ -558,7 +669,8 @@ class OrchestratorAgent:
         constraints: TravelConstraints,
         budget_breakdown: BudgetBreakdown,
         review_report: any = None,  # Optional ReviewReport
-        repair_cycles: int = 0
+        repair_cycles: int = 0,
+        insights: Optional[PlanInsights] = None
     ) -> FinalItinerary:
         """Convert DraftItinerary to FinalItinerary with Review status (Phase 6-7)."""
         from ..models import FinalItinerary, ReviewStatus
@@ -599,11 +711,48 @@ class OrchestratorAgent:
             days=draft.days,
             neighborhoods=neighborhoods,
             logistics_summary=logistics_summary,
+            strategic_insight=insights.strategic_insight if insights else None,
+            budget_analysis=insights.budget_analysis if insights else None,
+            cost_optimization_tips=insights.cost_optimization_tips if insights else [],
             budget_rollup=budget_breakdown,
             review_status=review_status,
             review_warnings=review_warnings,
             disclaimer=base_disclaimer
         )
+    
+    async def _generate_insights(self, constraints: TravelConstraints, draft: DraftItinerary) -> PlanInsights:
+        """Generate strategic insights and budget analysis using LLM."""
+        if self.llm_client is None:
+             return PlanInsights(
+                strategic_insight="A well-paced itinerary balancing major landmarks and local experiences.",
+                budget_analysis=f"The budget of {constraints.budget_total} {constraints.currency} aligns with a comfortable mid-range trip for {constraints.duration_days} days.",
+                cost_optimization_tips=["Book transport in advance", "Use local supermarkets for snacks", "Look for free walking tours"]
+            )
+        
+        system_prompt = """You are a travel strategy expert. Analyze the itinerary and constraints.
+Generate:
+1. strategic_insight: Narrative on why this plan is smart (e.g. 'Covers 100% of the Ring Road', 'Strategic pace').
+2. budget_analysis: A 'Reality Check' on the budget vs duration. Mention if it's budget, mid-range, or luxury.
+3. cost_optimization_tips: 3-5 practical tips to save money for this specific trip.
+
+Respond with valid JSON matching the PlanInsights schema."""
+
+        prompt = f"Constraints: {constraints.model_dump_json()}\nItinerary Summary: Total cost {draft.total_estimated_cost} {draft.currency}, {len(draft.days)} days. Cities: {', '.join(set(d.city for d in draft.days))}"
+        
+        try:
+            insights = await self.llm_client.generate_with_schema(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                output_schema=PlanInsights
+            )
+            return insights
+        except Exception as e:
+             print(f"Insight generation failed: {e}")
+             return PlanInsights(
+                strategic_insight="A balanced itinerary designed for maximum coverage of the requested regions.",
+                budget_analysis="The budget is sufficient for a standard mid-range experience at this destination.",
+                cost_optimization_tips=["Eat at local markets", "Consider a multi-day regional pass"]
+            )
     
     async def repair(
         self,

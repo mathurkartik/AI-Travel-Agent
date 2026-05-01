@@ -14,6 +14,7 @@ from .destination import DestinationAgent
 from .logistics import LogisticsAgent
 from .budget import BudgetAgent
 from .review import ReviewAgent
+from .trip_structuring import TripStructuringAgent
 
 __all__ = [
     "OrchestratorAgent",
@@ -21,4 +22,5 @@ __all__ = [
     "LogisticsAgent",
     "BudgetAgent",
     "ReviewAgent",
+    "TripStructuringAgent",
 ]

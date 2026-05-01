@@ -3,6 +3,8 @@
 from .schemas import (
     # Core constraints
     TravelConstraints,
+    Region,
+    TripStructure,
     
     # Destination outputs
     Activity,
@@ -38,6 +40,7 @@ from .schemas import (
     
     # Final output
     FinalItinerary,
+    PlanInsights,
     
     # API models
     PlanRequest,
@@ -50,6 +53,8 @@ from .schemas import (
 
 __all__ = [
     "TravelConstraints",
+    "Region",
+    "TripStructure",
     "Activity",
     "ActivityType",
     "ActivityCatalog",
@@ -73,6 +78,7 @@ __all__ = [
     "ReviewSeverity",
     "ReviewStatus",
     "FinalItinerary",
+    "PlanInsights",
     "PlanRequest",
     "PlanResponse",
     "HealthResponse",

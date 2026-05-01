@@ -37,6 +37,7 @@ Design a simple Travel Planning Multi-Agent System that transforms a short trave
 | Component | Responsibility | Primary Output |
 |-----------|---------------|----------------|
 | **Orchestrator** | Parse request → structured constraints; decompose work; merge partial plans; resolve conflicts; final narrative itinerary | TravelConstraints, DraftItinerary, FinalItinerary |
+| **Trip Structuring** | (For trips > 7 days) Pre-processes constraints, segments trip geographically, defines route and pacing | TripStructure, Region[] |
 | **Destination Research** | Places, food, temples, experiences; crowd-aware options; must-do vs nice-to-have | ActivityCatalog, neighborhood notes |
 | **Logistics** | Stays per city, inter-city transport, daily ordering, travel-time sanity, backtracking reduction | LodgingPlan, MovementPlan, DaySkeleton[] |
 | **Budget** | Category split (stay/transport/food/activities); totals vs cap; cheaper alternatives | BudgetBreakdown, flags, suggested_swaps[] |
@@ -50,7 +51,7 @@ Design a simple Travel Planning Multi-Agent System that transforms a short trave
 
 ### Pipeline Flow
 ```
-Orchestrator → parallel(Destination, Logistics, Budget) → merge → Review → (optional repair) → FinalItinerary
+Orchestrator → TripStructuringAgent → parallel per-region(Destination, Logistics, Budget) → merge → Review → (optional repair) → FinalItinerary
 ```
 
 ---
@@ -70,13 +71,15 @@ Orchestrator extracts key constraints:
 - Preferences: food, temples
 - Avoidances: crowds
 
-### 2. Parallel Agent Execution
+### 2. Trip Structuring & Parallel Execution
 ```
-Orchestrator ─┬─→ Destination: prefs, cities, duration, avoidances
-              ├─→ Logistics: cities, duration, rough intent
-              └─→ Budget: budget cap, duration, cities
+Orchestrator → TripStructuringAgent: >7 days trips are broken into regions
+
+Orchestrator ─┬─→ Destination (per region): prefs, cities, duration, avoidances
+              ├─→ Logistics (per region): cities, duration, rough intent
+              └─→ Budget (per region): budget cap, duration, cities
 ```
-All three agents work in parallel to gather information.
+All three agents work in parallel for each region to gather information.
 
 ### 3. Agent Outputs
 | Agent | Output |
@@ -134,6 +137,13 @@ preferences: string[]           # e.g., ["food", "temples"]
 avoidances: string[]            # e.g., ["crowds"]
 hard_requirements: string[]     # inferred
 soft_preferences: string[]       # inferred
+```
+
+### TripStructure (TripStructuringAgent)
+```
+trip_type: "city_trip" | "road_trip" | "multi_region"
+regions: Region[]               # name, base_location, allocated_days
+route: string[]                 # ordered sequence of locations
 ```
 
 ### ActivityCatalog (Destination)
@@ -255,11 +265,11 @@ Agents call tools through a single **ToolRouter** with logging, timeouts, and ca
 | **2** | LLM extraction (Orchestrator A) | NL → TravelConstraints with validation |
 | **3** | Tool router (stubs) | Agents can call tools; swap stub → real later |
 | **4** | Worker agents v1 | Destination, Logistics, Budget produce valid artifacts |
-| **5** | Parallel execution & merge | Concurrent workers → coherent DraftItinerary |
+| **5** | Hierarchical Structuring & Merge | TripStructuringAgent → parallel workers → DraftItinerary |
 | **6** | Review Agent | Programmatic + LLM checks; known-bad drafts fail |
 | **7** | Repair loop & final API | Bounded retries; stable POST /api/plan contract |
 | **8** | Hardening & demo polish | Timeouts, observability, README, CORS |
-| **9** | Frontend application | Full-stack demo: browser → API → rendered plan |
+| **9** | Frontend application | Full-stack global demo: browser → API → rendered plan |
 | **10** | (Optional) Extensions | Human-in-the-loop, RAG, durable PlanState store |
 
 ### Milestones
@@ -278,11 +288,11 @@ Agents call tools through a single **ToolRouter** with logging, timeouts, and ca
 
 1. **Constraints First**: One orchestrator pass extracts TravelConstraints; worker agents never re-parse the raw user string
 2. **Typed Artifacts**: Pydantic/JSON Schema shared between backend and frontend (OpenAPI codegen)
-3. **Pipeline**: Orchestrator → parallel(Destination, Logistics, Budget) → merge → Review → (repair) → user
+3. **Pipeline**: Orchestrator → TripStructuringAgent → parallel per-region(Destination, Logistics, Budget) → merge → Review
 4. **Backend Owns Intelligence**: LLM keys, agents, tools run only on server
 5. **Frontend Owns Experience**: Input, loading states, structured rendering; no secrets in browser
 6. **Hub-and-Spoke Communication**: Only Orchestrator routes messages
-7. **Parallel Execution**: Three LLM calls with shared constraints for efficiency
+7. **Parallel Execution**: Three LLM calls per region with shared constraints for efficiency
 8. **Iterative Refinement**: Review → Revise → Re-review with bounded retries (max 2-3)
 9. **Two-Layer Review**: Programmatic checks (cheap, reliable) + LLM qualitative checks
 10. **Stable IDs**: On activities and lodging for deterministic merge and re-review
@@ -314,34 +324,34 @@ Agents call tools through a single **ToolRouter** with logging, timeouts, and ca
 ## Sequence Diagram Summary
 
 ```
-┌─────┐   ┌─────────────┐   ┌───────────┐   ┌─────────┐   ┌───────┐   ┌──────┐
-│User │   │ Orchestrator│   │Destination│   │Logistics│   │Budget │   │Review│
-└──┬──┘   └──────┬──────┘   └─────┬─────┘   └────┬────┘   └───┬───┘   └──┬───┘
-   │              │                │                │            │          │
-   │ NL request   │                │                │            │          │
-   │─────────────>│                │                │            │          │
-   │              │ extract constraints             │            │          │
-   │              │───────────────┬────────────────┬──────────────┤          │
-   │              │ [par] prefs, cities, etc.      │            │          │
-   │              │───────────────>│                │            │          │
-   │              │                │ ActivityCatalog│            │          │
-   │              │<───────────────│                │            │          │
-   │              │──────────────────────────────────────────────>│          │
-   │              │                               Lodging+Movement+DaySkeleton
-   │              │<─────────────────────────────────────────────│          │
-   │              │──────────────────────────────────────────────────────────>│
-   │              │                                    BudgetBreakdown+flags
-   │              │<──────────────────────────────────────────────────────────│
-   │              │ merge → DraftItinerary                              │
-   │              │──────────────────────────────────────────────────────────>│
-   │              │                                    ReviewReport
-   │              │<──────────────────────────────────────────────────────────│
-   │              │ [alt: fail/warnings] revise → re-review (bounded)
-   │              │──────────────────────────────────────────────────────────>│
-   │              │                                    (re-review)
-   │              │<──────────────────────────────────────────────────────────│
-   │ Final Itinerary
-   │<─────────────│
+┌─────┐   ┌─────────────┐   ┌────────────────┐   ┌───────────┐   ┌─────────┐   ┌───────┐   ┌──────┐
+│User │   │ Orchestrator│   │TripStructuring │   │Destination│   │Logistics│   │Budget │   │Review│
+└──┬──┘   └──────┬──────┘   └───────┬────────┘   └─────┬─────┘   └────┬────┘   └───┬───┘   └──┬───┘
+   │              │                 │                  │              │            │          │
+   │ NL request   │                 │                  │              │            │          │
+   │─────────────>│                 │                  │              │            │          │
+   │              │ extract         │                  │              │            │          │
+   │              │────────────────>│                  │              │            │          │
+   │              │                 │ define regions   │              │            │          │
+   │              │<────────────────│                  │              │            │          │
+   │              │────────────────────────────────────┬──────────────┬────────────┤          │
+   │              │ [par per region] constraints       │              │            │          │
+   │              │───────────────────────────────────>│              │            │          │
+   │              │                 │                  │ActivityCat.  │            │          │
+   │              │<───────────────────────────────────│              │            │          │
+   │              │───────────────────────────────────────────────────>│           │          │
+   │              │                                 Lodging+Move+DaySkel           │          │
+   │              │<───────────────────────────────────────────────────│           │          │
+   │              │────────────────────────────────────────────────────────────────>│         │
+   │              │                                              BudgetBreakdown    │         │
+   │              │<────────────────────────────────────────────────────────────────│         │
+   │              │ merge → DraftItinerary                                                    │
+   │              │──────────────────────────────────────────────────────────────────────────>│
+   │              │                                              ReviewReport                 │
+   │              │<──────────────────────────────────────────────────────────────────────────│
+   │              │ [alt: fail] revise → re-review (bounded)                                  │
+   │ Final Plan   │──────────────────────────────────────────────────────────────────────────>│
+   │<─────────────│                                                                           │
 ```
 
 ---

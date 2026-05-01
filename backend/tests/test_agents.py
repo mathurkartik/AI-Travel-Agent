@@ -307,5 +307,31 @@ class TestAgentIntegration:
         assert len(logistics.lodging_plans) == len(sample_constraints.cities)
 
 
+    @pytest.mark.asyncio
+    async def test_agents_region_aware_workflow(self):
+        """Agents handle region-specific constraints."""
+        tool_router = ToolRouter()
+        # Region-specific constraints created by orchestrator
+        region_constraints = TravelConstraints(
+            destination_region="South Coast",
+            cities=["Vik"],
+            duration_days=4,
+            budget_total=2000,
+            currency="USD"
+        )
+        
+        dest_agent = DestinationAgent(tool_router=tool_router)
+        logistics_agent = LogisticsAgent(tool_router=tool_router)
+        
+        # Destination agent focuses on the region constraints
+        catalog = await dest_agent.research(region_constraints)
+        assert "Vik" in catalog.per_city
+        
+        # Logistics agent scales to region days
+        logistics = await logistics_agent.plan(region_constraints, catalog)
+        assert len(logistics.day_skeletons) == 4
+        assert logistics.lodging_plans[0].city == "Vik"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
