@@ -147,7 +147,7 @@ Respond with valid JSON matching this schema:
   "cities": ["City1", "City2"],
   "duration_days": number,
   "budget_total": number,
-  "currency": "3-letter code like USD, EUR, JPY",
+  "currency": "3-letter code like INR, USD, EUR (default to INR)",
   "preferences": ["what they want to experience"],
   "avoidances": ["what they want to avoid"],
   "hard_requirements": ["must-haves inferred from request"],
@@ -156,13 +156,11 @@ Respond with valid JSON matching this schema:
 
 CRITICAL RULES:
 - Extract the destination EXACTLY as the user mentions it
-- cities must contain ONLY the cities the user explicitly named
-- NEVER substitute or default to any city not mentioned by the user
-- If user says "Switzerland", destination_region is "Switzerland"
-- If user says "Tokyo + Kyoto", cities are ["Tokyo", "Kyoto"]
-- If user says "Paris", cities are ["Paris"]
+- If the user mentions a country but no cities, infer 1-2 major cities (e.g., the capital) to ensure a valid itinerary
+- If specific cities are named, include ONLY those cities
+- If user says "Switzerland", destination_region is "Switzerland" and cities might be ["Zurich", "Lucerne"]
 - Duration: count nights + 1 if not specified
-- Budget: use explicit numbers or estimate a reasonable default
+- Budget: default to 50000 INR if not mentioned
 - Preferences: align with what they want (food, temples, nature, etc.)
 - Avoidances: capture dislikes (crowds, tourist traps, etc.)"""
 

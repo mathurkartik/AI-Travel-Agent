@@ -315,62 +315,91 @@ class ToolRouter:
         }
     
     def _get_static_price_band(self, category: str, city: str, band: str) -> Tuple[float, str]:
-        """Return static price estimates for common cities."""
+        """Return static price estimates for common cities worldwide."""
         city_lower = city.lower()
         band_lower = band.lower()
         cat_lower = category.lower()
-        
-        # Japan cities
-        if any(c in city_lower for c in ["tokyo", "kyoto", "osaka"]):
-            prices = {
-                "hotel": {
-                    "budget": (50, "Capsule hotel or business hotel"),
-                    "moderate": (120, "3-star hotel or Airbnb"),
-                    "expensive": (250, "4-star hotel in prime location"),
-                    "luxury": (500, "5-star hotel or ryokan")
-                },
-                "food": {
-                    "budget": (15, "Convenience store, ramen shop"),
-                    "moderate": (40, "Mid-range restaurant, set meals"),
-                    "expensive": (80, "Upscale dining, kaiseki"),
-                    "luxury": (200, "Michelin-starred restaurant")
-                },
-                "activity": {
-                    "budget": (0, "Free temples, parks, walking"),
-                    "moderate": (20, "Museums, observation decks"),
-                    "expensive": (80, "Day tours, cooking classes"),
-                    "luxury": (300, "Private tours, exclusive experiences")
-                },
-                "transport": {
-                    "budget": (5, "Local train, bus"),
-                    "moderate": (20, "Taxi for short trips"),
-                    "expensive": (100, "Shinkansen between cities"),
-                    "luxury": (300, "Private car with driver")
-                }
+
+        def build_prices(hotel, food, activity, transport):
+            return {
+                "hotel": {"budget": (hotel[0], "Budget accommodation"), "moderate": (hotel[1], "Mid-range hotel"), "expensive": (hotel[2], "Upscale hotel"), "luxury": (hotel[3], "Luxury hotel")},
+                "food":  {"budget": (food[0], "Street food / casual"), "moderate": (food[1], "Mid-range dining"), "expensive": (food[2], "Upscale dining"), "luxury": (food[3], "Fine dining")},
+                "activity": {"budget": (activity[0], "Free sights / parks"), "moderate": (activity[1], "Museums / tours"), "expensive": (activity[2], "Premium experiences"), "luxury": (activity[3], "Private tours")},
+                "transport": {"budget": (transport[0], "Public transit"), "moderate": (transport[1], "Taxi / rideshare"), "expensive": (transport[2], "Inter-city travel"), "luxury": (transport[3], "Private car")},
             }
-            return prices.get(cat_lower, {}).get(band_lower, (50, "Generic estimate"))
-        
-        # European cities
-        if any(c in city_lower for c in ["paris", "rome", "barcelona", "london"]):
-            prices = {
-                "hotel": {
-                    "budget": (60, "Hostel or budget hotel"),
-                    "moderate": (150, "3-star hotel"),
-                    "expensive": (300, "4-star boutique hotel"),
-                    "luxury": (600, "5-star luxury hotel")
-                },
-                "food": {
-                    "budget": (20, "Street food, casual cafe"),
-                    "moderate": (50, "Bistro or trattoria"),
-                    "expensive": (100, "Fine dining restaurant"),
-                    "luxury": (250, "Michelin dining experience")
-                }
-            }
-            return prices.get(cat_lower, {}).get(band_lower, (60, "European estimate"))
-        
-        # Default fallback
-        return (50, f"Generic estimate for {city}")
-    
+
+        # ── Japan ─────────────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["tokyo", "kyoto", "osaka", "japan"]):
+            prices = build_prices([50,120,250,500], [15,40,80,200], [0,20,80,300], [5,20,100,300])
+            return prices.get(cat_lower, {}).get(band_lower, (50, "Japan estimate"))
+
+        # ── Scandinavia ────────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["stockholm","gothenburg","malmo","sweden",
+                                          "oslo","bergen","norway",
+                                          "copenhagen","denmark",
+                                          "helsinki","finland",
+                                          "reykjavik","iceland"]):
+            prices = build_prices([70,160,320,650], [25,60,120,280], [5,25,90,350], [10,30,120,400])
+            return prices.get(cat_lower, {}).get(band_lower, (70, "Scandinavia estimate"))
+
+        # ── Western Europe ─────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["paris","rome","barcelona","london","amsterdam",
+                                          "berlin","madrid","lisbon","prague","vienna",
+                                          "zurich","geneva","brussels","dublin"]):
+            prices = build_prices([60,150,300,600], [20,50,100,250], [5,20,75,300], [8,25,100,350])
+            return prices.get(cat_lower, {}).get(band_lower, (60, "Western Europe estimate"))
+
+        # ── SE Asia ────────────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["bangkok","phuket","chiang mai","thailand",
+                                          "singapore",
+                                          "bali","jakarta","indonesia",
+                                          "kuala lumpur","malaysia",
+                                          "hanoi","ho chi minh","vietnam",
+                                          "manila","philippines"]):
+            prices = build_prices([20,55,120,350], [5,15,40,100], [3,15,50,200], [3,12,60,200])
+            return prices.get(cat_lower, {}).get(band_lower, (25, "SE Asia estimate"))
+
+        # ── USA / Canada ───────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["new york","los angeles","chicago","miami",
+                                          "san francisco","boston","seattle",
+                                          "toronto","vancouver","montreal"]):
+            prices = build_prices([80,180,350,700], [20,55,110,250], [10,30,100,400], [10,35,150,500])
+            return prices.get(cat_lower, {}).get(band_lower, (80, "North America estimate"))
+
+        # ── Middle East ────────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["dubai","abu dhabi","qatar","doha",
+                                          "istanbul","turkey"]):
+            prices = build_prices([60,150,300,800], [15,40,90,250], [10,25,80,400], [10,30,100,500])
+            return prices.get(cat_lower, {}).get(band_lower, (60, "Middle East estimate"))
+
+        # ── South Asia ─────────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["mumbai","delhi","bangalore","kolkata","india",
+                                          "kathmandu","nepal",
+                                          "colombo","sri lanka"]):
+            prices = build_prices([15,50,120,350], [5,15,35,100], [2,10,40,150], [3,10,50,200])
+            return prices.get(cat_lower, {}).get(band_lower, (20, "South Asia estimate"))
+
+        # ── Africa ─────────────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["cape town","johannesburg","south africa",
+                                          "nairobi","kenya",
+                                          "marrakech","morocco",
+                                          "cairo","egypt"]):
+            prices = build_prices([30,80,180,400], [10,25,60,150], [5,20,60,250], [5,20,80,300])
+            return prices.get(cat_lower, {}).get(band_lower, (35, "Africa estimate"))
+
+        # ── Latin America ──────────────────────────────────────────────────────
+        if any(c in city_lower for c in ["mexico city","cancun","mexico",
+                                          "buenos aires","argentina",
+                                          "rio de janeiro","sao paulo","brazil",
+                                          "bogota","colombia","lima","peru"]):
+            prices = build_prices([25,70,150,350], [8,20,50,150], [5,15,50,200], [5,15,60,250])
+            return prices.get(cat_lower, {}).get(band_lower, (30, "Latin America estimate"))
+
+        # ── Default fallback ───────────────────────────────────────────────────
+        prices = build_prices([40,100,220,500], [12,35,75,180], [5,20,65,250], [5,20,80,300])
+        return prices.get(cat_lower, {}).get(band_lower, (50, f"Generic estimate for {city}"))
+
+
     # =========================================================================
     # Utility Methods
     # =========================================================================

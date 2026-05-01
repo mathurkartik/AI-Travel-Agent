@@ -440,10 +440,191 @@ Focus on:
                     address="Dotonbori, Chuo Ward, Osaka"
                 ),
             ]
-        
+        elif city_lower in ["norway", "oslo", "bergen"]:
+            activities = [
+                Activity(
+                    id="norway-oslo-opera",
+                    name="Oslo Opera House",
+                    city=city,
+                    type=ActivityType.OTHER,
+                    estimated_duration_hours=1.5,
+                    cost_band=CostBand.BUDGET,
+                    crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True,
+                    rationale="Modern architecture with panoramic city views",
+                    tags=["architecture", "views", "oslo"],
+                    address="Kirsten Flagstads Plass 1, Oslo"
+                ),
+                Activity(
+                    id="norway-fjords-cruise",
+                    name="Fjord Sightseeing Cruise",
+                    city=city,
+                    type=ActivityType.NATURE,
+                    estimated_duration_hours=3.0,
+                    cost_band=CostBand.EXPENSIVE,
+                    crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True,
+                    rationale="Experience the breathtaking Norwegian fjords",
+                    tags=["nature", "fjord", "scenic"],
+                    address="Oslo or Bergen Port"
+                ),
+                Activity(
+                    id="norway-bryggen",
+                    name="Bryggen Hanseatic Wharf",
+                    city=city,
+                    type=ActivityType.TEMPLE,  # Closest to historic
+                    estimated_duration_hours=2.0,
+                    cost_band=CostBand.BUDGET,
+                    crowd_level=CrowdLevel.HIGH,
+                    must_do=True,
+                    rationale="UNESCO World Heritage historic wharf in Bergen",
+                    tags=["history", "unesco", "bergen"],
+                    address="Bryggen, Bergen"
+                )
+            ]
+        elif city_lower in ["thailand", "bangkok", "phuket"]:
+            activities = [
+                Activity(
+                    id="thailand-grand-palace",
+                    name="Grand Palace",
+                    city=city,
+                    type=ActivityType.TEMPLE,
+                    estimated_duration_hours=3.0,
+                    cost_band=CostBand.MODERATE,
+                    crowd_level=CrowdLevel.HIGH,
+                    must_do=True,
+                    rationale="Stunning royal palace complex in Bangkok",
+                    tags=["temple", "palace", "culture", "bangkok"],
+                    address="Na Phra Lan Rd, Bangkok"
+                ),
+                Activity(
+                    id="thailand-wat-arun",
+                    name="Wat Arun (Temple of Dawn)",
+                    city=city,
+                    type=ActivityType.TEMPLE,
+                    estimated_duration_hours=1.5,
+                    cost_band=CostBand.BUDGET,
+                    crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True,
+                    rationale="Iconic riverside temple with beautiful porcelain",
+                    tags=["temple", "river", "views", "bangkok"],
+                    address="Bangkok Riverside"
+                ),
+                Activity(
+                    id="thailand-phi-phi",
+                    name="Phi Phi Islands Tour",
+                    city=city,
+                    type=ActivityType.NATURE,
+                    estimated_duration_hours=8.0,
+                    cost_band=CostBand.EXPENSIVE,
+                    crowd_level=CrowdLevel.HIGH,
+                    must_do=True,
+                    rationale="Crystal clear waters and stunning limestone cliffs",
+                    tags=["nature", "beach", "islands", "phuket"],
+                    address="Phuket or Krabi"
+                )
+            ]
+        elif city_lower in ["sweden", "stockholm", "gothenburg", "malmo"]:
+            activities = [
+                Activity(id="sweden-vasa-museum", name="Vasa Museum", city=city, type=ActivityType.MUSEUM,
+                    estimated_duration_hours=2.5, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True, rationale="World's only preserved 17th-century warship", tags=["museum","history","stockholm"], address="Galärvarvsvägen 14, Stockholm"),
+                Activity(id="sweden-gamla-stan", name="Gamla Stan (Old Town)", city=city, type=ActivityType.OTHER,
+                    estimated_duration_hours=3.0, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Medieval old town with colourful buildings and cobblestone streets", tags=["history","walk","old town"], address="Gamla Stan, Stockholm"),
+                Activity(id="sweden-abba-museum", name="ABBA The Museum", city=city, type=ActivityType.MUSEUM,
+                    estimated_duration_hours=2.0, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=False, rationale="Interactive pop music museum in Djurgården", tags=["music","culture","fun"], address="Djurgårdsvägen 68, Stockholm"),
+                Activity(id="sweden-skansen", name="Skansen Open-Air Museum", city=city, type=ActivityType.NATURE,
+                    estimated_duration_hours=3.0, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True, rationale="World's oldest open-air museum showcasing Swedish history", tags=["culture","nature","history"], address="Djurgårdsslätten 49-51, Stockholm"),
+            ]
+        elif city_lower in ["singapore"]:
+            activities = [
+                Activity(id="sg-gardens-bay", name="Gardens by the Bay", city=city, type=ActivityType.NATURE,
+                    estimated_duration_hours=3.0, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Iconic Supertree Grove and Cloud Forest domes", tags=["nature","iconic","gardens"], address="18 Marina Gardens Dr, Singapore"),
+                Activity(id="sg-marina-bay-sands", name="Marina Bay Sands SkyPark", city=city, type=ActivityType.OTHER,
+                    estimated_duration_hours=1.5, cost_band=CostBand.EXPENSIVE, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Spectacular 360° views of the city skyline", tags=["views","iconic","skyline"], address="10 Bayfront Ave, Singapore"),
+                Activity(id="sg-hawker-centre", name="Maxwell Food Centre", city=city, type=ActivityType.FOOD,
+                    estimated_duration_hours=1.5, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Award-winning Hainanese chicken rice and local favourites", tags=["food","hawker","local"], address="1 Kadayanallur St, Singapore"),
+                Activity(id="sg-chinatown", name="Chinatown Heritage Trail", city=city, type=ActivityType.OTHER,
+                    estimated_duration_hours=2.0, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=False, rationale="Colourful shophouses, temples and street markets", tags=["culture","walk","history"], address="Chinatown, Singapore"),
+            ]
+        elif city_lower in ["dubai", "abu dhabi"]:
+            activities = [
+                Activity(id="dubai-burj-khalifa", name="Burj Khalifa At The Top", city=city, type=ActivityType.OTHER,
+                    estimated_duration_hours=2.0, cost_band=CostBand.EXPENSIVE, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="World's tallest building with breathtaking observatory views", tags=["iconic","views","architecture"], address="1 Sheikh Mohammed bin Rashid Blvd"),
+                Activity(id="dubai-old-souk", name="Gold & Spice Souk", city=city, type=ActivityType.SHOPPING,
+                    estimated_duration_hours=2.0, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Traditional souks with gold jewellery and exotic spices", tags=["shopping","culture","heritage"], address="Deira, Dubai"),
+                Activity(id="dubai-desert-safari", name="Desert Safari at Sunset", city=city, type=ActivityType.NATURE,
+                    estimated_duration_hours=6.0, cost_band=CostBand.EXPENSIVE, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True, rationale="Dune bashing, camel rides, and BBQ dinner under the stars", tags=["nature","adventure","desert"], address="Dubai Desert Conservation Reserve"),
+                Activity(id="dubai-dubai-frame", name="Dubai Frame", city=city, type=ActivityType.OTHER,
+                    estimated_duration_hours=1.5, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=False, rationale="Giant picture frame with views of old and new Dubai", tags=["architecture","views"], address="Zabeel Park, Dubai"),
+            ]
+        elif city_lower in ["berlin", "munich", "hamburg"]:
+            activities = [
+                Activity(id="berlin-brandeburg-gate", name="Brandenburg Gate", city=city, type=ActivityType.OTHER,
+                    estimated_duration_hours=1.0, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Berlin's most iconic landmark and symbol of reunification", tags=["history","iconic","free"], address="Pariser Platz, 10117 Berlin"),
+                Activity(id="berlin-east-side-gallery", name="East Side Gallery", city=city, type=ActivityType.MUSEUM,
+                    estimated_duration_hours=1.5, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True, rationale="1.3 km of original Berlin Wall covered in murals", tags=["art","history","berlin wall"], address="Mühlenstraße 3-100, Berlin"),
+                Activity(id="berlin-museum-island", name="Museum Island", city=city, type=ActivityType.MUSEUM,
+                    estimated_duration_hours=4.0, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True, rationale="UNESCO World Heritage ensemble of five world-class museums", tags=["museum","history","unesco"], address="Museum Island, Mitte, Berlin"),
+                Activity(id="berlin-street-food", name="Markthalle Neun Street Food Thursday", city=city, type=ActivityType.FOOD,
+                    estimated_duration_hours=2.0, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.HIGH,
+                    must_do=False, rationale="Vibrant street food market in a historic market hall", tags=["food","market","local"], address="Eisenbahnstraße 42/43, Berlin"),
+            ]
+        elif city_lower in ["amsterdam"]:
+            activities = [
+                Activity(id="amsterdam-rijksmuseum", name="Rijksmuseum", city=city, type=ActivityType.MUSEUM,
+                    estimated_duration_hours=3.0, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Netherlands' premier museum with Rembrandt and Vermeer masterpieces", tags=["museum","art","history"], address="Museumstraat 1, Amsterdam"),
+                Activity(id="amsterdam-canal-cruise", name="Canal Boat Cruise", city=city, type=ActivityType.OTHER,
+                    estimated_duration_hours=1.5, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="See the UNESCO canal ring from the water", tags=["canals","scenic","iconic"], address="Central Amsterdam"),
+                Activity(id="amsterdam-anne-frank", name="Anne Frank House", city=city, type=ActivityType.MUSEUM,
+                    estimated_duration_hours=2.0, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Poignant wartime hiding place of the Frank family", tags=["history","wwii","museum"], address="Westermarkt 20, Amsterdam"),
+            ]
+        elif city_lower in ["london"]:
+            activities = [
+                Activity(id="london-british-museum", name="British Museum", city=city, type=ActivityType.MUSEUM,
+                    estimated_duration_hours=3.0, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="World's greatest collection of human history and culture — free entry", tags=["museum","history","free"], address="Great Russell St, London"),
+                Activity(id="london-tower-london", name="Tower of London", city=city, type=ActivityType.MUSEUM,
+                    estimated_duration_hours=2.5, cost_band=CostBand.EXPENSIVE, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="900-year-old fortress housing the Crown Jewels", tags=["history","castle","iconic"], address="Tower Hill, London"),
+                Activity(id="london-borough-market", name="Borough Market", city=city, type=ActivityType.FOOD,
+                    estimated_duration_hours=2.0, cost_band=CostBand.MODERATE, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="London's oldest and most vibrant food market", tags=["food","market","local"], address="8 Southwark St, London"),
+            ]
+        elif city_lower in ["mumbai", "delhi", "bangalore", "india"]:
+            activities = [
+                Activity(id="india-gateway", name="Gateway of India", city=city, type=ActivityType.OTHER,
+                    estimated_duration_hours=1.5, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Iconic colonial arch overlooking the Arabian Sea", tags=["history","iconic","mumbai"], address="Apollo Bunder, Mumbai"),
+                Activity(id="india-local-market", name="Local Bazaar Experience", city=city, type=ActivityType.SHOPPING,
+                    estimated_duration_hours=2.5, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.HIGH,
+                    must_do=True, rationale="Vibrant street markets with spices, textiles, and local crafts", tags=["shopping","culture","local"], address=f"Central Market, {city}"),
+                Activity(id="india-street-food", name="Street Food Walk", city=city, type=ActivityType.FOOD,
+                    estimated_duration_hours=2.0, cost_band=CostBand.BUDGET, crowd_level=CrowdLevel.MEDIUM,
+                    must_do=True, rationale="Sample authentic local street food — chaat, vada pav, dosas", tags=["food","street","local","authentic"], address=f"Food Street, {city}"),
+            ]
+
         # If no specific city data, generate generic activities
         if not activities:
             activities = self._generate_generic_activities(city, constraints)
+
         
         # Filter by avoidances
         if constraints.avoidances:
@@ -456,79 +637,81 @@ Focus on:
         city: str,
         constraints: TravelConstraints
     ) -> List[Activity]:
-        """Generate generic activities for any city when no specific data exists."""
+        """Generate high-quality generic activities for any city worldwide."""
         city_clean = city.lower().replace(' ', '-')
+        region = constraints.destination_region
+        
         return [
             Activity(
-                id=f"{city_clean}-city-center",
-                name=f"Explore {city} City Center",
+                id=f"{city_clean}-landmark",
+                name=f"Iconic {city} Landmark & Architecture Tour",
                 city=city,
                 type=ActivityType.OTHER,
                 estimated_duration_hours=3.0,
                 cost_band=CostBand.BUDGET,
-                crowd_level=CrowdLevel.MEDIUM,
+                crowd_level=CrowdLevel.HIGH,
                 must_do=True,
-                rationale=f"Central area with main attractions and landmarks in {city}",
-                tags=["sightseeing", "walking", "downtown"],
-                address=f"City Center, {city}"
+                rationale=f"Explore the most famous landmarks and architectural wonders in {city}, {region}.",
+                tags=["sightseeing", "architecture", "iconic"],
+                address=f"Central District, {city}"
             ),
             Activity(
                 id=f"{city_clean}-local-food",
-                name=f"Try Local Cuisine in {city}",
+                name=f"Authentic {city} Food & Market Experience",
                 city=city,
                 type=ActivityType.FOOD,
-                estimated_duration_hours=2.0,
+                estimated_duration_hours=2.5,
                 cost_band=CostBand.MODERATE,
                 crowd_level=CrowdLevel.MEDIUM,
                 must_do=True,
-                rationale=f"Experience authentic local food and dining scene",
-                tags=["food", "local", "dining"],
-                address=f"Downtown {city}"
-            ),
-            Activity(
-                id=f"{city_clean}-main-park",
-                name=f"Visit {city} Main Park/Garden",
-                city=city,
-                type=ActivityType.NATURE,
-                estimated_duration_hours=2.0,
-                cost_band=CostBand.BUDGET,
-                crowd_level=CrowdLevel.LOW,
-                must_do=False,
-                rationale="Relax in green space and enjoy outdoor atmosphere",
-                tags=["nature", "park", "relaxing"],
-                address=f"Central Park, {city}"
+                rationale=f"Taste the best local delicacies and explore vibrant food markets in {city}.",
+                tags=["food", "local", "market", "authentic"],
+                address=f"Old Town / Market Area, {city}"
             ),
             Activity(
                 id=f"{city_clean}-museum",
-                name=f"{city} Museum or Gallery",
+                name=f"National Museum of {city}",
                 city=city,
                 type=ActivityType.MUSEUM,
                 estimated_duration_hours=2.5,
                 cost_band=CostBand.MODERATE,
                 crowd_level=CrowdLevel.MEDIUM,
                 must_do=False,
-                rationale="Learn about local history, art, and culture",
-                tags=["museum", "culture", "history"],
-                address=f"Museum District, {city}"
+                rationale=f"Discover the rich history, art and cultural heritage of {city} and {region}.",
+                tags=["museum", "history", "culture"],
+                address=f"Museum Quarter, {city}"
+            ),
+            Activity(
+                id=f"{city_clean}-park",
+                name=f"Relax at {city} Central Park & Gardens",
+                city=city,
+                type=ActivityType.NATURE,
+                estimated_duration_hours=2.0,
+                cost_band=CostBand.BUDGET,
+                crowd_level=CrowdLevel.LOW,
+                must_do=False,
+                rationale=f"Enjoy a peaceful break in the city's best green spaces and public gardens.",
+                tags=["nature", "park", "relaxing"],
+                address=f"City Park, {city}"
+            ),
+            Activity(
+                id=f"{city_clean}-hidden-gem",
+                name=f"Explore {city}'s Hidden Neighborhoods",
+                city=city,
+                type=ActivityType.OTHER,
+                estimated_duration_hours=3.5,
+                cost_band=CostBand.BUDGET,
+                crowd_level=CrowdLevel.LOW,
+                must_do=False,
+                rationale=f"Walk through the less-visited, authentic districts of {city} to see local life.",
+                tags=["walking", "local", "neighborhood", "off-beat"],
+                address=f"Residential Districts, {city}"
             ),
             Activity(
                 id=f"{city_clean}-shopping",
-                name=f"Shopping in {city}",
+                name=f"Shopping at {city} Local Souvenirs & Crafts",
                 city=city,
                 type=ActivityType.SHOPPING,
-                estimated_duration_hours=3.0,
-                cost_band=CostBand.MODERATE,
-                crowd_level=CrowdLevel.MEDIUM,
-                must_do=False,
-                rationale="Explore local shops, markets, and boutiques",
-                tags=["shopping", "markets", "souvenirs"],
-                address=f"Main Shopping Area, {city}"
-            ),
-            Activity(
-                id=f"{city_clean}-nightlife",
-                name=f"{city} Nightlife Experience",
-                city=city,
-                type=ActivityType.ENTERTAINMENT,
                 estimated_duration_hours=3.0,
                 cost_band=CostBand.MODERATE,
                 crowd_level=CrowdLevel.HIGH,

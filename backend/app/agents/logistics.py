@@ -141,19 +141,70 @@ class LogisticsAgent:
     def _get_default_neighborhoods(self, city: str) -> List[str]:
         """Get default neighborhoods for a city."""
         defaults = {
+            # Japan
             "tokyo": ["Shinjuku", "Shibuya", "Asakusa"],
             "kyoto": ["Gion", "Higashiyama", "Kawaramachi"],
             "osaka": ["Dotonbori", "Umeda", "Shinsekai"],
+            # Europe
             "paris": ["Marais", "Saint-Germain", "Montmartre"],
             "rome": ["Trastevere", "Centro Storico", "Monti"],
+            "barcelona": ["Gothic Quarter", "Eixample", "Gracia"],
+            "amsterdam": ["Jordaan", "De Pijp", "Centrum"],
+            "berlin": ["Mitte", "Prenzlauer Berg", "Kreuzberg"],
+            "london": ["Soho", "Shoreditch", "South Bank"],
+            "prague": ["Old Town", "Mala Strana", "Vinohrady"],
+            "vienna": ["Innere Stadt", "Mariahilf", "Naschmarkt"],
+            "lisbon": ["Alfama", "Chiado", "Belem"],
+            "madrid": ["Malasana", "La Latina", "Retiro"],
+            # Scandinavia
+            "stockholm": ["Gamla Stan", "Sodermalm", "Ostermalm"],
+            "gothenburg": ["Haga", "Linne", "Avenyn"],
+            "malmo": ["Gamla Staden", "Sodermalm", "Vastra Hamnen"],
+            "oslo": ["Aker Brygge", "Grunerlokka", "Frogner"],
+            "bergen": ["Bryggen", "Nordnes", "Sandviken"],
+            "copenhagen": ["Nyhavn", "Vesterbro", "Frederiksberg"],
+            "helsinki": ["Kamppi", "Kallio", "Ullanlinna"],
+            "reykjavik": ["Downtown", "Laugardalur", "Hafnarfjordur"],
+            "sweden": ["Gamla Stan", "Sodermalm", "Ostermalm"],
+            "norway": ["Aker Brygge", "Grunerlokka", "Frogner"],
+            # SE Asia
+            "bangkok": ["Silom", "Sukhumvit", "Rattanakosin"],
+            "phuket": ["Patong", "Kata", "Kamala"],
+            "singapore": ["Marina Bay", "Chinatown", "Orchard"],
+            "bali": ["Seminyak", "Ubud", "Canggu"],
+            "kuala lumpur": ["Bukit Bintang", "KLCC", "Bangsar"],
+            "hanoi": ["Old Quarter", "Hoan Kiem", "Tay Ho"],
+            "ho chi minh city": ["District 1", "District 3", "Phu My Hung"],
+            "jakarta": ["Menteng", "Kemang", "Sudirman"],
+            # Americas
+            "new york": ["Midtown", "Brooklyn", "West Village"],
+            "los angeles": ["Santa Monica", "Silver Lake", "Venice"],
+            "chicago": ["The Loop", "Lincoln Park", "Wicker Park"],
+            "miami": ["South Beach", "Wynwood", "Brickell"],
+            "san francisco": ["Mission District", "Nob Hill", "Fisherman's Wharf"],
+            "mexico city": ["Condesa", "Roma Norte", "Polanco"],
+            "toronto": ["Kensington Market", "Distillery District", "Yorkville"],
+            "buenos aires": ["Palermo", "San Telmo", "Recoleta"],
+            # Middle East
+            "dubai": ["Downtown Dubai", "Jumeirah", "Dubai Marina"],
+            "istanbul": ["Sultanahmet", "Beyoglu", "Kadikoy"],
+            # Africa
+            "cape town": ["V&A Waterfront", "Gardens", "Sea Point"],
+            "marrakech": ["Medina", "Gueliz", "Hivernage"],
+            "nairobi": ["Westlands", "Karen", "Kileleshwa"],
+            # South Asia
+            "mumbai": ["Colaba", "Bandra", "Marine Drive"],
+            "delhi": ["Connaught Place", "Hauz Khas", "Lodi Colony"],
+            "bangalore": ["Indiranagar", "Koramangala", "MG Road"],
         }
-        return defaults.get(city.lower(), ["City Center"])
-    
+        return defaults.get(city.lower(), [f"{city} City Centre", f"Central {city}"])
+
     async def _create_movement_plans(
         self,
         cities: List[str],
         constraints: TravelConstraints
     ) -> List[MovementPlan]:
+
         """Create inter-city movement plans using ToolRouter."""
         if len(cities) < 2:
             return []
@@ -277,9 +328,9 @@ class LogisticsAgent:
             skeleton = DaySkeleton(
                 day_number=current_day,
                 city=city,
-                is_travel_day=is_travel_day,
                 slots=slots,
-                notes=f"Day in {city}" if not is_travel_day else f"Travel day: {city} -> {cities[current_city_idx + 1] if current_city_idx + 1 < len(cities) else 'next'}"
+                total_travel_time_hours=travel_hours,
+                pacing_notes=f"Day in {city}" if not is_travel_day else f"Travel day: {city} -> {cities[current_city_idx + 1] if current_city_idx + 1 < len(cities) else 'next'}"
             )
             skeletons.append(skeleton)
             

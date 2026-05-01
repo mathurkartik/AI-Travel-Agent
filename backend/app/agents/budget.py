@@ -56,7 +56,7 @@ class BudgetAgent:
         total_cost = 0.0
         
         # Determine price band based on budget level
-        price_band = self._determine_price_band(constraints)
+        price_band = await self._determine_price_band(constraints)
         
         # Estimate costs for each category
         for city in constraints.cities:
@@ -108,19 +108,36 @@ class BudgetAgent:
             suggested_swaps=suggested_swaps
         )
     
-    def _determine_price_band(self, constraints: TravelConstraints) -> str:
+    async def _determine_price_band(self, constraints: TravelConstraints) -> str:
         """Determine appropriate price band based on budget level."""
         # Simple heuristic: budget per day
         if constraints.duration_days == 0:
             return "moderate"
         
-        daily_budget = constraints.budget_total / constraints.duration_days
+        daily_budget_target = constraints.budget_total / constraints.duration_days
         
-        if daily_budget < 100:
+        # Convert daily budget from target currency to USD for band determination
+        if constraints.currency.upper() == "USD":
+            daily_budget_usd = daily_budget_target
+        else:
+            if self.tool_router:
+                try:
+                    result = await self.tool_router.fx_convert(
+                        amount=daily_budget_target,
+                        from_currency=constraints.currency,
+                        to_currency="USD"
+                    )
+                    daily_budget_usd = result.get("converted_amount", daily_budget_target / 83.0)
+                except Exception:
+                    daily_budget_usd = daily_budget_target / 83.0
+            else:
+                daily_budget_usd = daily_budget_target / 83.0
+        
+        if daily_budget_usd < 100:
             return "budget"
-        elif daily_budget < 200:
+        elif daily_budget_usd < 200:
             return "moderate"
-        elif daily_budget < 400:
+        elif daily_budget_usd < 400:
             return "expensive"
         else:
             return "luxury"
@@ -151,7 +168,8 @@ class BudgetAgent:
         else:
             cost_per_night = self.price_bands.get("japan", {}).get("stay", {}).get(price_band, 100)
         
-        total_cost = cost_per_night * nights
+        total_cost_usd = cost_per_night * nights
+        total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
         
         return BudgetCategory(
             category="stay",
@@ -186,7 +204,8 @@ class BudgetAgent:
         else:
             cost_per_day = self.price_bands.get("japan", {}).get("food", {}).get(price_band, 40)
         
-        total_cost = cost_per_day * days
+        total_cost_usd = cost_per_day * days
+        total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
         
         return BudgetCategory(
             category="food",
@@ -223,7 +242,8 @@ class BudgetAgent:
         days = max(1, constraints.duration_days // len(constraints.cities))
         local_transport = 10 * days  # ~$10 per day for local transport
         
-        total_cost = transport_cost + local_transport
+        total_cost_usd = transport_cost + local_transport
+        total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
         
         return BudgetCategory(
             category="transport",
@@ -258,7 +278,8 @@ class BudgetAgent:
         else:
             cost_per_day = self.price_bands.get("japan", {}).get("activities", {}).get(price_band, 20)
         
-        total_cost = cost_per_day * days
+        total_cost_usd = cost_per_day * days
+        total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
         
         return BudgetCategory(
             category="activities",
@@ -267,6 +288,25 @@ class BudgetAgent:
             notes=f"Activities and attractions in {city} ({price_band})"
         )
     
+    async def _convert_to_target(self, amount_usd: float, target_currency: str) -> float:
+        """Convert USD amount to target currency."""
+        if target_currency.upper() == "USD":
+            return amount_usd
+        
+        if self.tool_router:
+            try:
+                result = await self.tool_router.fx_convert(
+                    amount=amount_usd,
+                    from_currency="USD",
+                    to_currency=target_currency
+                )
+                return result.get("converted_amount", amount_usd * 83.0)
+            except Exception:
+                pass
+        
+        fallbacks = {"INR": 83.0, "EUR": 0.92, "JPY": 150.0}
+        return amount_usd * fallbacks.get(target_currency.upper(), 1.0)
+
     def _generate_swap_suggestions(
         self,
         categories: List[any],
@@ -303,7 +343,7 @@ class BudgetAgent:
         
         # Suggest cutting expensive activities
         activity_cat = next((c for c in categories if c.category == "activities"), None)
-        if activity_cat:
+        if activity_cat and activity_cat.estimated_total > 0:
             potential_savings = activity_cat.estimated_total * 0.5
             swaps.append(SuggestedSwap(
                 original_item="Paid attractions and tours",

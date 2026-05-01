@@ -63,9 +63,9 @@ class TravelConstraints(BaseModel):
     """
     destination_region: str = Field(..., min_length=1, max_length=100, description="Primary region/country")
     cities: List[str] = Field(..., min_length=1, max_length=10, description="Target cities to visit")
-    duration_days: int = Field(..., ge=1, le=30, description="Trip duration in days")
-    budget_total: float = Field(..., gt=0, le=1000000, description="Total budget in specified currency")
-    currency: str = Field(default="USD", min_length=3, max_length=3, description="Currency code (ISO 4217)")
+    duration_days: int = Field(..., ge=1, le=90, description="Trip duration in days")
+    budget_total: float = Field(..., gt=0, le=100000000, description="Total budget in specified currency (supports INR and large amounts)")
+    currency: str = Field(default="INR", min_length=3, max_length=3, description="Currency code (ISO 4217)")
     preferences: List[str] = Field(default_factory=list, description="What the user wants (e.g., 'food', 'temples')")
     avoidances: List[str] = Field(default_factory=list, description="What the user wants to avoid (e.g., 'crowds')")
     hard_requirements: List[str] = Field(default_factory=list, description="Must-haves inferred from request")
@@ -116,7 +116,7 @@ class TravelConstraints(BaseModel):
                 "cities": ["Tokyo", "Kyoto"],
                 "duration_days": 5,
                 "budget_total": 3000,
-                "currency": "USD",
+                "currency": "INR",
                 "preferences": ["food", "temples"],
                 "avoidances": ["crowds"],
                 "hard_requirements": ["visit both Tokyo and Kyoto"],
@@ -551,7 +551,7 @@ JAPAN_5D_TOKYO_KYOTO_3000_CONSTRAINTS = TravelConstraints(
     cities=["Tokyo", "Kyoto"],
     duration_days=5,
     budget_total=3000,
-    currency="USD",
+    currency="INR",
     preferences=["food", "temples"],
     avoidances=["crowds"],
     hard_requirements=["visit both Tokyo and Kyoto"],

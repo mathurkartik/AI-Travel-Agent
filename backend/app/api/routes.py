@@ -72,20 +72,52 @@ async def create_plan(request: Request, plan_request: PlanRequest):
         # Extract basic info from request for personalized stub
         import re
         request_lower = plan_request.request.lower()
+        request_text = plan_request.request
         
-        # Extract city
+        # ── Extract destination ────────────────────────────────────────────
         cities = []
-        match = re.search(r'(?:trip|visit)\s+to\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)', plan_request.request)
-        if match:
-            cities = [match.group(1).strip()]
-        if not cities:
-            match = re.search(r'(?:in|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)', plan_request.request)
-            if match:
-                cities = [match.group(1).strip()]
-        if not cities:
-            cities = ["New York"]
+        # Stopwords that should never be treated as a destination
+        stop = {'the','a','an','my','our','this','that','days','day','week','weeks',
+                'month','months','trip','plan','budget','love','hate','with','and',
+                'for','about','around','in','on','at','to','of','from','like','want',
+                'need','looking','search','find','make','create','generate','build',
+                'please','help','can','should','would','could','some','any','all',
+                'i','me','we','us','it','is','am','are','be','do','have','has'}
         
-        # Extract duration (weeks or days)
+        # Strategy 1: "trip to X", "visit X", "in X", "of X", "to X"
+        m = re.search(
+            r'(?:trip\s+to|travel\s+to|visit|visiting|going\s+to|to|in|of)\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)',
+            request_text
+        )
+        if m:
+            candidate = m.group(1).strip()
+            # If the candidate is "The Search", skip it (user noise)
+            if candidate.lower() not in stop and candidate.lower() != "search" and len(candidate) > 1:
+                cities = [candidate.title()]
+        
+        # Strategy 2: first capitalized word(s) not in stopwords
+        if not cities:
+            words = request_text.split()
+            for w in words:
+                clean = w.strip('",.!?;:()[]/\\')
+                if clean and clean[0].isupper() and clean.lower() not in stop and len(clean) > 1:
+                    # Specific check for "The Search" or "Search" noise
+                    if clean.lower() == "search": continue
+                    cities = [clean.title()]
+                    break
+        
+        # Strategy 3: find any word > 3 chars not in stop (best guess)
+        if not cities:
+            for w in request_text.split():
+                clean = w.strip(',.!?;:')
+                if clean.lower() not in stop and len(clean) > 3 and clean.isalpha():
+                    cities = [clean.title()]
+                    break
+        
+        if not cities:
+            cities = ["World"]  # absolute last resort
+        
+        # ── Extract duration ───────────────────────────────────────────────
         duration = 5
         weeks_match = re.search(r'(\d+)\s*-?\s*week', request_lower)
         if weeks_match:
@@ -95,11 +127,20 @@ async def create_plan(request: Request, plan_request: PlanRequest):
             if days_match:
                 duration = int(days_match.group(1))
         
-        # Extract budget
-        budget_match = re.search(r'\$\s*(\d+)', plan_request.request)
-        if not budget_match:
-            budget_match = re.search(r'budget\s*\$?\s*(\d+)', request_lower)
-        budget = int(budget_match.group(1)) if budget_match else 3000
+        # ── Extract budget ─────────────────────────────────────────────────
+        # Supports: $3000, 1500000 budget, budget 50000, "50000 INR", etc.
+        budget = 50000  # default INR
+        budget_patterns = [
+            r'[\$€£₹]\s*([\d,]+)',               # $3000, ₹50000
+            r'([\d,]+)\s*(?:INR|USD|EUR|GBP|budget)',  # 1500000 INR / 1500000 budget
+            r'budget\s*[\$€£₹]?\s*([\d,]+)',      # budget 50000
+        ]
+        for pat in budget_patterns:
+            bm = re.search(pat, request_text, re.IGNORECASE)
+            if bm:
+                budget = int(bm.group(1).replace(',', ''))
+                break
+
         
         primary_city = cities[0]
         
@@ -109,7 +150,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
             cities=cities,
             duration_days=duration,
             budget_total=budget,
-            currency="USD",
+            currency="INR",
             preferences=["Cultural experiences", "Local cuisine", "Sightseeing"],
             avoidances=[],
             hard_requirements=[],
@@ -118,7 +159,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
         
         # Generate rich narrative days based on extracted info
         stub_days = []
-        for day_num in range(1, min(duration + 1, 8)):  # Cap at 7 days for stub
+        for day_num in range(1, duration + 1):
             if day_num == 1:
                 day_items = [
                     DayItineraryItem(
@@ -219,27 +260,33 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                 categories=[
                     BudgetCategory(
                         category="stay",
-                        estimated_total=duration * 120.0,
-                        currency="USD",
-                        notes=f"{duration} nights in {primary_city}"
+                        estimated_total=duration * 5000.0,
+                        currency="INR",
+                        notes=f"{duration} nights in {primary_city} (mid-range)"
                     ),
                     BudgetCategory(
                         category="food",
-                        estimated_total=duration * 60.0,
-                        currency="USD",
+                        estimated_total=duration * 2500.0,
+                        currency="INR",
                         notes="Daily meals and local cuisine"
                     ),
                     BudgetCategory(
                         category="activities",
-                        estimated_total=total_cost,
-                        currency="USD",
+                        estimated_total=duration * 3000.0,
+                        currency="INR",
                         notes="Attractions and experiences"
                     ),
+                    BudgetCategory(
+                        category="transport",
+                        estimated_total=duration * 1500.0,
+                        currency="INR",
+                        notes="Local transport and transfers"
+                    ),
                 ],
-                grand_total=duration * 180.0 + total_cost,
-                currency="USD",
-                within_budget=True,
-                remaining_buffer=budget - (duration * 180.0 + total_cost)
+                grand_total=duration * 12000.0,
+                currency="INR",
+                within_budget=budget >= (duration * 12000.0),
+                remaining_buffer=max(0, budget - (duration * 12000.0))
             ),
             review_status=ReviewStatus.PASS,
             disclaimer="This is a stub response with narrative-style itineraries. Set GROQ_API_KEY for LLM-powered detailed extraction and full orchestration with real-time data."

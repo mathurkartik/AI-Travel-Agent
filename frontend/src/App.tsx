@@ -301,6 +301,62 @@ function App() {
   if (!response) return null;
 
   const { final_itinerary, constraints, review_summary } = response;
+  const { budget_rollup, neighborhoods, days, logistics_summary } = final_itinerary;
+
+  // ── helpers ──────────────────────────────────────────────────────────────
+  const getCurrencySymbol = (currency: string): string => {
+    const map: Record<string, string> = {
+      INR: '₹', USD: '$', EUR: '€', GBP: '£', JPY: '¥',
+      THB: '฿', SGD: 'S$', AUD: 'A$', CAD: 'C$', KRW: '₩', SEK: 'kr', NOK: 'kr',
+    };
+    return map[currency?.toUpperCase()] ?? currency ?? '$';
+  };
+
+  const currencySymbol = getCurrencySymbol(budget_rollup?.currency || constraints.currency);
+
+  const formatAmount = (amount: number): string => {
+    const sym = currencySymbol;
+    if (amount >= 100000) return `${sym}${(amount / 100000).toFixed(1)}L`;
+    if (amount >= 1000)   return `${sym}${(amount / 1000).toFixed(1)}k`;
+    return `${sym}${Math.round(amount).toLocaleString()}`;
+  };
+
+  const allCities   = constraints.cities?.join(' & ') || constraints.destination_region;
+  const primaryDest = constraints.cities?.[0] || constraints.destination_region;
+
+  const heroSubtitle = constraints.preferences?.length
+    ? `Curated for ${constraints.preferences.slice(0, 3).join(', ')} enthusiasts. Optimised for budget and transit efficiency.`
+    : 'Your personalised AI-generated travel plan. Optimised for budget and transit efficiency.';
+
+  const aboutText = `This ${constraints.duration_days}-day itinerary across ${constraints.destination_region} has been meticulously crafted by our AI agents to balance iconic sightseeing with authentic local experiences. We've optimised your travel routes to minimise transit time, giving you more hours to enjoy ${allCities}.`;
+
+  const lodgingArea = (() => {
+    if (days?.[0]?.lodging_area) return days[0].lodging_area;
+    const firstCity = neighborhoods && Object.keys(neighborhoods)[0];
+    return firstCity && (neighborhoods as Record<string, string[]>)[firstCity]?.[0]
+      ? (neighborhoods as Record<string, string[]>)[firstCity][0]
+      : `${primaryDest} City Centre`;
+  })();
+
+  const diningHighlight = (() => {
+    const prefs = (constraints.preferences ?? []).map((p: string) => p.toLowerCase());
+    if (prefs.some((p: string) => p.includes('michelin') || p.includes('fine dining'))) return 'Fine Dining';
+    if (prefs.some((p: string) => p.includes('food') || p.includes('cuisine') || p.includes('local'))) return 'Local Cuisine';
+    if (prefs.some((p: string) => p.includes('street'))) return 'Street Food';
+    return 'Local Restaurants';
+  })();
+
+  // Merge duplicate categories (e.g., "stay" per city → one total)
+  const groupedBudget = (budget_rollup?.categories ?? []).reduce<Record<string, number>>((acc, cat: any) => {
+    acc[cat.category] = (acc[cat.category] ?? 0) + cat.estimated_total;
+    return acc;
+  }, {});
+
+  const categoryLabels: Record<string, string> = {
+    stay: 'Accommodation', food: 'Food & Dining', transport: 'Transport', activities: 'Activities',
+  };
+
+
 
   return (
     <div className="app">
@@ -349,10 +405,8 @@ function App() {
               <AIAgentIcon />
               <span>AI Generated Itinerary</span>
             </div>
-            <h1>Discover your perfect {constraints.duration_days}-day {constraints.cities[0]} itinerary</h1>
-            <p className="itinerary-hero-subtitle">
-              Curated specifically for art lovers, foodies, and urban explorers. Optimized for budget and transit efficiency.
-            </p>
+            <h1>Discover your perfect {constraints.duration_days}-day {allCities} itinerary</h1>
+            <p className="itinerary-hero-subtitle">{heroSubtitle}</p>
             <button className="explore-button">
               Explore Full Itinerary <ArrowRightIcon />
             </button>
@@ -365,26 +419,22 @@ function App() {
           <div className="itinerary-main">
             {/* About Section */}
             <div className="content-card">
-              <h3 className="card-title">About Your {constraints.cities[0]} Journey</h3>
-              <p className="about-text">
-                Welcome to the city that never sleeps. This {constraints.duration_days}-day itinerary has been meticulously crafted by our AI agents 
-                to balance iconic sightseeing with local neighborhood vibes. We've optimized your travel routes to minimize transit time, 
-                allowing you to immerse yourself fully in {constraints.cities[0]}'s energy and creative spirit.
-              </p>
+              <h3 className="card-title">About Your {allCities} Journey</h3>
+              <p className="about-text">{aboutText}</p>
               
               <div className="feature-grid">
                 <div className="feature-card">
                   <div className="feature-icon"><BuildingIcon /></div>
                   <div className="feature-content">
                     <span className="feature-label">Stay</span>
-                    <span className="feature-value">Midtown area</span>
+                    <span className="feature-value">{lodgingArea}</span>
                   </div>
                 </div>
                 <div className="feature-card">
                   <div className="feature-icon"><UtensilsIcon /></div>
                   <div className="feature-content">
                     <span className="feature-label">Dining</span>
-                    <span className="feature-value">Michelin Picks</span>
+                    <span className="feature-value">{diningHighlight}</span>
                   </div>
                 </div>
               </div>
@@ -409,45 +459,42 @@ function App() {
               </div>
               
               <div className="budget-categories">
-                <div className="budget-category">
-                  <div className="category-name">Accommodation</div>
-                  <div className="category-value">$800</div>
-                </div>
-                <div className="budget-category">
-                  <div className="category-name">Activities</div>
-                  <div className="category-value">$600</div>
-                </div>
-                <div className="budget-category">
-                  <div className="category-name">Food</div>
-                  <div className="category-value">$400</div>
-                </div>
-                <div className="budget-category">
-                  <div className="category-name">Transport</div>
-                  <div className="category-value">$200</div>
-                </div>
+                {Object.entries(groupedBudget).map(([cat, total]) => (
+                  <div key={cat} className="budget-category">
+                    <div className="category-name">{categoryLabels[cat] || cat.charAt(0).toUpperCase() + cat.slice(1)}</div>
+                    <div className="category-value">{formatAmount(total as number)}</div>
+                  </div>
+                ))}
               </div>
-              
               <div className="budget-total">
                 <span className="budget-total-label">Total Estimated Cost</span>
-                <span className="budget-total-value">${final_itinerary.budget_rollup.grand_total}</span>
+                <span className="budget-total-value">{formatAmount(budget_rollup?.grand_total ?? 0)}</span>
               </div>
+              {(budget_rollup?.remaining_buffer ?? 0) > 0 && (
+                <div style={{ marginTop: '8px', fontSize: '13px', color: '#16a34a' }}>
+                  ✓ {formatAmount(budget_rollup.remaining_buffer)} remaining buffer
+                </div>
+              )}
             </div>
 
             {/* Daily Schedule */}
             <div className="content-card">
               <h3 className="card-title">Daily Schedule</h3>
               <div className="schedule-section">
-                {final_itinerary.days.slice(0, 2).map((day, index) => (
+                {days.map((day) => (
                   <div key={day.day_number} className="day-card">
                     <div className="day-timeline">
                       <div className="day-timeline-dot" />
                     </div>
                     <div className="day-header">
                       <span className="day-badge">Day {day.day_number}</span>
-                      <span className="day-title">{index === 0 ? 'Manhattan Exploration' : 'Brooklyn & Culture'}</span>
+                      <span className="day-title">{day.day_summary || `Explore ${day.city}`}</span>
+                      {day.city && (
+                        <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#6b7280' }}>📍 {day.city}</span>
+                      )}
                     </div>
                     <div className="activities-grid">
-                      {day.items.slice(0, 4).map((item, i) => (
+                      {day.items.map((item, i) => (
                         <div key={i} className="activity-card">
                           <div className="activity-time">{item.time}</div>
                           <div className="activity-title">{item.activity_name}</div>
@@ -455,6 +502,11 @@ function App() {
                         </div>
                       ))}
                     </div>
+                    {day.day_cost > 0 && (
+                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#9ca3af', textAlign: 'right' }}>
+                        Day cost: {formatAmount(day.day_cost)}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -529,17 +581,31 @@ function App() {
                 Book This Itinerary <ArrowRightIcon />
               </button>
               
-              <div className="testimonial">
-                <div className="stars">★★★★★</div>
-                <p className="testimonial-text">
-                  "The AI perfectly balanced tourist spots with local hidden gems. The routing saved us hours of subway travel!"
-                </p>
-                <div className="testimonial-author">
-                  <div className="author-avatar">SJ</div>
-                  <div className="author-info">
-                    <span className="author-name">Sarah J.</span>
-                    <span className="author-detail">Traveled to NYC</span>
+              <div style={{ marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
+                <div style={{ fontWeight: 600, marginBottom: '12px', fontSize: '14px' }}>Trip Summary</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '13px', color: '#4b5563' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>📍 Destination</span>
+                    <span style={{ fontWeight: 500, color: '#111' }}>{constraints.destination_region}</span>
                   </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>📅 Duration</span>
+                    <span style={{ fontWeight: 500, color: '#111' }}>{constraints.duration_days} days</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>🏙️ Cities</span>
+                    <span style={{ fontWeight: 500, color: '#111', textAlign: 'right' }}>{constraints.cities?.join(', ')}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>💰 Budget</span>
+                    <span style={{ fontWeight: 500, color: '#111' }}>{formatAmount(constraints.budget_total)}</span>
+                  </div>
+                  {(constraints.preferences?.length ?? 0) > 0 && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>❤️ Interests</span>
+                      <span style={{ fontWeight: 500, color: '#111', textAlign: 'right', maxWidth: '120px' }}>{constraints.preferences.slice(0, 3).join(', ')}</span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

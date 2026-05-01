@@ -4,6 +4,63 @@ Quick reference of key outcomes from each development session.
 
 ---
 
+## Session 15 | 2026-05-01 | Globalization & Dynamic Rendering
+
+### Summary
+Transformed the AI Travel Planner from a Japan/NYC-centric prototype into a fully dynamic, global travel engine. Eliminated all hardcoded geographic and currency UI fallbacks, ensuring the frontend renders real-time data for any destination worldwide.
+
+### Key Deliverables
+- **Dynamic Frontend**: Completely refactored `App.tsx` to remove static NYC templates; implemented dynamic rendering for all itinerary components and a "Trip Summary" sidebar.
+- **Global Currency Support**: Added formatter for INR (Lakhs/thousands) and other currencies with automatic symbol detection.
+- **Worldwide Regional Logic**:
+  - **Logistics**: Neighborhood lookups for 30+ major global cities.
+  - **Router**: Regional pricing bands for Scandinavia, SE Asia, Middle East, Africa, South Asia, etc.
+  - **Destination**: Expanded regional catalogs and high-quality generic activity generation.
+- **Robust Stub Fallback**: Rewrote stub extraction to correctly identify destinations and budgets (INR) even from noisy input, with realistic INR-based pricing.
+- **Raised Constraints**: Budget cap raised to 100M and duration to 90 days.
+
+### Status
+✅ **World-Aware** - The system now provides meaningful, dynamically rendered plans for any country or city globally.
+
+## Session 14 | 2026-05-01 | Bug Fixes & GitHub Push
+
+### Summary
+Fixed critical validation errors, improved LLM prompt for destination extraction, and pushed complete codebase to GitHub.
+
+### Key Deliverables
+- **Fixed Activity ID Validation**: Sanitized LLM-generated activity IDs to remove apostrophes, quotes, and special characters
+  - Updated `_llm_generate_activities()` in `destination.py` (line 175-177)
+  - Updated `_search_result_to_activity()` in `destination.py` (line 261-263)
+  - Strips: `'`, `"`, `(`, `)`, `&`, `,` from activity names in IDs
+
+- **Fixed Empty ActivityCatalog Error**: 
+  - Added `_get_static_catalog_for_constraints()` method for fallback when LLM fails
+  - Updated orchestrator to use static fallback instead of empty catalog (lines 147-155)
+  - Added generic activity generation for unknown cities (NYC, Paris, etc.)
+
+- **Improved Constraint Extraction Prompt**:
+  - Enhanced `groq_client.py` system prompt (lines 142-165)
+  - Explicit instructions: "Extract destination EXACTLY as user mentions it"
+  - Prevents defaulting to Japan/Tokyo when user asks for other destinations
+
+- **GitHub Repository Setup**:
+  - Created comprehensive `.gitignore` (Python, Node, env files, IDE files)
+  - Initialized git repository
+  - Made initial commit with 81 files
+  - Pushed to: `https://github.com/mathurkartik/AI-Travel-Agent`
+
+### Files Modified
+- `backend/app/agents/destination.py` - ID sanitization, static fallback
+- `backend/app/agents/orchestrator.py` - Fallback catalog usage
+- `backend/app/llm/groq_client.py` - Improved extraction prompt
+- `.gitignore` (new) - 50+ exclusion patterns
+
+### Status
+✅ **Bug fixes complete** - Backend now handles LLM rate limits gracefully with generic fallbacks
+✅ **Code on GitHub** - Repository public and ready for collaboration
+
+---
+
 ## Session 13 | 2026-04-30 | Phase 9: Frontend Implementation
 
 ### Summary
@@ -481,7 +538,10 @@ Implemented Phase 6 Review Agent with programmatic and LLM qualitative checks, i
 | 4 | ✅ | Worker agents |
 | 5 | ✅ | Parallel execution |
 | 6 | ✅ | Review agent |
-| 7 | ⏳ | Repair loop |
+| 7 | ✅ | Repair loop |
+| 8 | ✅ | Hardening, observability, CORS |
+| 9 | ✅ | Frontend implementation |
+| 10 | ⏳ | Extensions (optional) |
 
 ### Commands
 ```bash

@@ -4,6 +4,108 @@ This file tracks all work sessions and task completions for the AI Travel Planne
 
 ---
 
+## 2026-05-01 | Session 15 | Globalization & Dynamic Rendering
+
+### Tasks Completed
+
+1. **Full-Scale Frontend Globalization**
+   - Removed all static New York content (hero titles, descriptions, testimonials).
+   - Implemented dynamic rendering for itinerary titles, lodging areas, and dining.
+   - Created dynamic currency formatter (`formatAmount`) supporting INR, USD, EUR, SEK, etc.
+   - Added `getCurrencySymbol` helper for global currency symbols (₹, $, kr, etc.).
+   - Enabled display of all itinerary days (removed 2-day cap).
+   - Added "Trip Summary" sidebar rendering constraints (destination, cities, budget, interests).
+
+2. **Backend Worldwide Coverage Expansion**
+   - **Logistics**: Expanded `_get_default_neighborhoods` to support 30+ major global cities.
+   - **Router**: Implemented robust global price bands for Scandinavia, SE Asia, Americas, Middle East, Africa, South Asia, and Latin America.
+   - **Destination**: Added static activity catalogs for Sweden, Singapore, Dubai, Berlin, Amsterdam, London, and Indian metros.
+   - **Generic Generator**: Enhanced `_generate_generic_activities` with high-quality, country-aware activity templates for any city worldwide.
+
+3. **Schema & Extraction Hardening**
+   - **Schemas**: Raised `budget_total` limit to 100M and `duration_days` to 90 to support large INR budgets and long tours.
+   - **Stub Extraction**: Completely rewrote regex-based stub extraction in `routes.py` to skip instructional noise (e.g., "In the search box...") and correctly identify bare INR numbers.
+   - **Stub Realism**: Updated stub budget multipliers to realistic INR-friendly values (₹12,000/day) and enabled generation for full trip durations.
+
+### Verification
+- Verified Norway 7-day trip renders with correct INR budget and activities.
+- Verified Sweden 15-day trip with ₹1.5M budget passes schema validation and renders dynamically.
+- Verified stub mode extraction correctly identifies "Sweden" even with noisy input.
+- All 93 unit and integration tests passing.
+
+### Files Modified
+- `frontend/src/App.tsx` - Complete globalization overhaul
+- `backend/app/agents/logistics.py` - Expanded neighborhood lookups
+- `backend/app/tools/router.py` - Global price band implementation
+- `backend/app/agents/destination.py` - Global catalogs and generic generator improvements
+- `backend/app/models/schemas.py` - Increased budget and duration caps
+- `backend/app/api/routes.py` - Robust stub extraction and generation
+
+### Status
+✅ **Project is now Global** - Fully dynamic UI and backend logic for worldwide travel.
+✅ **Robust Fallbacks** - High-quality stub mode for any destination when LLM is rate-limited.
+
+## 2026-05-01 | Session 14 | Bug Fixes & GitHub Repository
+
+### Tasks Completed
+
+1. **Fixed Activity ID Validation Errors**
+   - Problem: LLM generating IDs with apostrophes (e.g., "katz's-delicatessen") causing Pydantic validation errors
+   - Solution: Enhanced ID sanitization in `destination.py`
+   - Changes:
+     - Line 175-177: Added `.replace("'", '').replace('"', '').replace('(', '').replace(')', '').replace('&', 'and').replace(',', '')` to `_llm_generate_activities()`
+     - Line 261-263: Same sanitization to `_search_result_to_activity()`
+   - Result: Activity IDs now URL-safe and validation-compliant
+
+2. **Fixed Empty ActivityCatalog Validation Error**
+   - Problem: When LLM rate-limited (429 error), fallback created `ActivityCatalog(activities=[])` violating `min_length=1` constraint
+   - Solution: Implemented proper static fallback with generic activities
+   - Changes:
+     - Added `_get_static_catalog_for_constraints()` method in `destination.py`
+     - Updated orchestrator lines 147-155 to use static fallback instead of empty catalog
+     - Added `_generate_generic_activities()` for unknown cities (NYC, Paris, etc.)
+   - Result: Backend now gracefully handles LLM failures with 6 generic activities per city
+
+3. **Improved Constraint Extraction Prompt**
+   - Problem: LLM defaulting to "New York" when user asked for "Switzerland"
+   - Solution: Enhanced system prompt with explicit extraction rules
+   - Changes in `groq_client.py` lines 142-165:
+     - "Extract the destination EXACTLY as the user mentions it"
+     - "NEVER substitute or default to any city not mentioned by the user"
+     - Added specific examples: Switzerland, Tokyo+Kyoto, Paris
+   - Result: More accurate destination extraction from natural language
+
+4. **GitHub Repository Setup**
+   - Created comprehensive `.gitignore` with 50+ patterns:
+     - Python: `__pycache__/`, `*.pyc`, `venv/`
+     - Node: `node_modules/`, `dist/`, `build/`
+     - Secrets: `.env`, `*.pem`, `*.key`
+     - IDE: `.vscode/`, `.idea/`
+     - OS: `.DS_Store`, `Thumbs.db`
+   - Initialized git repository
+   - Made initial commit: "Initial commit: AI Travel Agent - Multi-agent travel planning system with FastAPI backend and React frontend"
+   - Pushed to: `https://github.com/mathurkartik/AI-Travel-Agent`
+   - Total files: 81 added
+
+### Verification
+- Backend starts successfully with `py -m uvicorn app.main:app --host 0.0.0.0 --port 8000`
+- Frontend running on `http://localhost:5173`
+- API health check passes
+- GitHub repository accessible and contains full codebase
+- `.env` with API keys properly excluded from git
+
+### Files Modified/Created
+- `backend/app/agents/destination.py` - ID sanitization, static fallback methods
+- `backend/app/agents/orchestrator.py` - Fallback catalog integration
+- `backend/app/llm/groq_client.py` - Enhanced extraction prompt
+- `.gitignore` (new) - Comprehensive exclusion patterns
+
+### Status
+✅ **All critical bugs fixed** - Backend handles edge cases gracefully
+✅ **Code on GitHub** - Repository ready for collaboration and deployment
+
+---
+
 ## 2026-04-30 | Session 13 | Phase 9: Frontend Implementation
 
 ### Tasks Completed
