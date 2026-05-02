@@ -597,11 +597,6 @@ function App() {
                         </div>
                       ))}
                     </div>
-                    {day.day_cost > 0 && (
-                      <div style={{ marginTop: '8px', fontSize: '12px', color: '#9ca3af', textAlign: 'right' }}>
-                        Day cost: {formatAmount(day.day_cost)}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>

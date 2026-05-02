@@ -311,7 +311,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                         notes=f"Enjoy lunch featuring local {region} cuisine. Continue exploring the {region} area. Capture photos of the landmarks."),
                 ]
                 day_summary = f"Day {day_num}: {title}"
-                day_cost = 80.0
+                day_cost = sum(item.cost_estimate for item in day_items)
             else:
                 # Varied generic days (rotate themes)
                 themes = [
@@ -337,7 +337,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                         notes=f"Enjoy local dining and evening atmosphere in {day_city}."),
                 ]
                 day_summary = f"Day {day_num}: {title} in {day_city}"
-                day_cost = 80.0
+                day_cost = sum(item.cost_estimate for item in day_items)
 
             
             stub_days.append(DayItinerary(
