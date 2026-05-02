@@ -1,93 +1,119 @@
-# AI Travel Planner
+# 🌍 GlobeAI — AI Travel Planner
 
-Multi-agent travel planning system that transforms natural language requests into structured itineraries.
+> A multi-agent AI system that transforms natural-language travel requests into structured, day-by-day trip itineraries — powered by specialized AI agents working in parallel.
 
-## Architecture
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?style=flat-square&logo=fastapi&logoColor=white)
+![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)
+![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=flat-square&logo=vite&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-LLaMA_3.3-F55036?style=flat-square)
+![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=flat-square&logo=docker&logoColor=white)
 
-- **Backend**: Python + FastAPI + Pydantic
-- **Frontend**: React + Vite + TypeScript
-- **Agents**: Orchestrator, Destination, Logistics, Budget, Review
-- **LLM**: Groq (llama-3.3-70b-versatile) with token budget management
+---
 
-## Project Structure
+## 📌 Problem Statement
+
+Planning a trip sounds simple, but quickly becomes overwhelming. A traveler might say:
+
+> *"Plan a 10-day trip to Thailand. ₹80,000 budget. Love temples and street food."*
+
+To fulfill that well, you need to combine **destination research**, **logistics planning**, **budget optimization**, and **quality validation** — all while respecting the traveler's preferences. Doing this manually takes hours.
+
+**GlobeAI solves this** by coordinating five specialized AI agents that work together on the problem, producing a complete itinerary in seconds.
+
+---
+
+## ✨ Key Features
+
+| Feature | Description |
+|---------|-------------|
+| 🤖 **Multi-Agent Architecture** | 5 specialized agents (Orchestrator, Destination, Logistics, Budget, Review) collaborate via a hub-and-spoke pattern |
+| 🧠 **Natural Language Understanding** | Describe your trip in plain English — the system extracts constraints automatically |
+| 🗺️ **Hierarchical Trip Planning** | Trips > 7 days are intelligently split into geographic regions for realistic itineraries |
+| ⚡ **Parallel Execution** | Destination, Logistics, and Budget agents run concurrently for speed |
+| ✅ **AI Quality Gate** | A Review Agent validates every itinerary against your constraints before delivery |
+| 🔧 **Auto-Repair Loop** | Failed reviews trigger up to 3 automated repair cycles |
+| 💰 **Budget Breakdown** | Categorized spending (Stay, Food, Transport, Activities) with within-budget validation |
+| 📊 **Strategic Insights** | AI-generated travel tips, budget analysis, and cost optimization suggestions |
+| 🌐 **Region-Specific Content** | Curated route templates and activity catalogs for Thailand, India, Vietnam, Japan, Iceland, and more |
+| 📧 **Booking Integration** | Submit booking requests directly from the itinerary page |
+| 🐳 **Docker Ready** | Dockerfiles and docker-compose for one-command deployment |
+
+---
+
+## 🏗️ Architecture
 
 ```
-M4/
-├── backend/                 # FastAPI application
-│   ├── app/
-│   │   ├── agents/          # Multi-agent system
-│   │   │   ├── orchestrator.py    # Central coordinator (Phases 5-8)
-│   │   │   ├── destination.py     # Activity research (Phase 4a)
-│   │   │   ├── logistics.py       # Lodging & transport (Phase 4b)
-│   │   │   ├── budget.py          # Cost analysis (Phase 4c)
-│   │   │   └── review.py          # Quality validation (Phase 6)
-│   │   ├── models/          # Shared Pydantic schemas
-│   │   │   └── schemas.py   # All data contracts
-│   │   ├── tools/           # ToolRouter (Phase 3)
-│   │   ├── api/             # HTTP routes
-│   │   ├── utils/           # Observability (Phase 8)
-│   │   │   └── observability.py   # Structured logging
-│   │   ├── config.py        # Settings
-│   │   └── main.py          # FastAPI app
-│   ├── tests/               # Test fixtures
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/                # React application (Phase 9)
-│   ├── src/
-│   │   ├── components/      # UI components
-│   │   ├── services/        # API client
-│   │   ├── hooks/           # React hooks
-│   │   └── types/           # TypeScript schemas
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── .env.example
-├── Docs/                    # Documentation
-│   ├── ProblemStatement.md
-│   ├── Architecture.md
-│   ├── ImplementationPlan.md
-│   ├── session_summary.md    # Development log
-│   └── execution_summary.md  # Task tracking
-└── README.md
+User Request (Natural Language)
+        │
+        ▼
+┌─────────────────────────────────┐
+│       Orchestrator Agent        │  ← Extracts TravelConstraints
+│   (Central Coordinator)         │  ← Manages pipeline & merge
+└─────────┬───────────────────────┘
+          │
+          ▼
+┌─────────────────────────────────┐
+│    Trip Structuring Agent       │  ← Splits into regions (if > 7 days)
+└─────────┬───────────────────────┘
+          │
+    ┌─────┼─────┐
+    ▼     ▼     ▼
+┌──────┐┌──────┐┌──────┐
+│Destin││Logis-││Budget│   ← Parallel execution (per region)
+│ation ││tics  ││Agent │
+└──┬───┘└──┬───┘└──┬───┘
+   └───────┼───────┘
+           ▼
+┌─────────────────────────────────┐
+│     Merge → DraftItinerary      │
+└─────────┬───────────────────────┘
+          ▼
+┌─────────────────────────────────┐
+│       Review Agent              │  ← Quality validation
+│   (pass / fail + repair hints)  │
+└─────────┬───────────────────────┘
+          │
+    [fail] → Repair → Re-review (max 3x)
+          │
+    [pass] ▼
+┌─────────────────────────────────┐
+│       FinalItinerary            │  → Delivered to user
+└─────────────────────────────────┘
 ```
 
-## Quick Start
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 
 - Python 3.11+
 - Node.js 18+
-- Groq API key (for LLM)
+- [Groq API Key](https://console.groq.com) (free tier available)
 
-### Backend Setup
+### Backend
 
 ```bash
 cd backend
 
-# Create virtual environment
+# Create and activate virtual environment
 python -m venv venv
-
-# Activate (choose one)
-source venv/bin/activate        # macOS/Linux
-venv\Scripts\activate           # Windows
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS/Linux
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Configure environment
 cp .env.example .env
-# Edit .env and add your GROQ_API_KEY
+# Edit .env → add your GROQ_API_KEY
 
 # Start server
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --port 8000
 ```
 
-The API will be available at `http://localhost:8000`:
-- **Health Check**: `GET /health`
-- **Create Plan**: `POST /api/plan`
-- **API Docs**: `http://localhost:8000/docs`
-- **Redoc**: `http://localhost:8000/redoc`
-
-### Frontend Setup
+### Frontend
 
 ```bash
 cd frontend
@@ -95,189 +121,163 @@ cd frontend
 # Install dependencies
 npm install
 
-# Configure environment
-cp .env.example .env.local
-# Edit .env.local if needed (default: VITE_API_URL=http://localhost:8000)
-
 # Start development server
 npm run dev
 ```
 
-Frontend will be at `http://localhost:5173`
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-### CORS Configuration
+---
 
-CORS is configured in `backend/app/config.py`. Default origins:
-- `http://localhost:5173` (Vite dev server)
-- `http://localhost:3000` (Alternative port)
+## 📂 Project Structure
 
-Add more origins via `.env`:
 ```
-CORS_ORIGINS=http://localhost:5173,https://yourdomain.com
+GlobeAI/
+├── backend/                     # FastAPI application
+│   ├── app/
+│   │   ├── agents/              # Multi-agent system
+│   │   │   ├── orchestrator.py  # Central coordinator (pipeline, merge, repair)
+│   │   │   ├── destination.py   # Activity & attraction research
+│   │   │   ├── logistics.py     # Lodging, transport & day sequencing
+│   │   │   ├── budget.py        # Cost analysis & optimization
+│   │   │   ├── review.py        # Quality validation gate
+│   │   │   └── trip_structuring.py  # Regional decomposition
+│   │   ├── models/schemas.py    # All Pydantic data contracts
+│   │   ├── tools/router.py      # Unified tool access layer
+│   │   ├── llm/                 # Groq client, token tracking, caching
+│   │   ├── api/routes.py        # HTTP endpoints
+│   │   ├── utils/observability.py  # Structured logging
+│   │   ├── config.py            # Settings & environment
+│   │   └── main.py              # FastAPI application entry
+│   ├── tests/                   # Comprehensive test suite
+│   ├── Dockerfile               # Production container
+│   └── requirements.txt
+├── frontend/                    # React + Vite + TypeScript
+│   ├── src/
+│   │   ├── App.tsx              # Main application (home + itinerary views)
+│   │   ├── hooks/               # API integration hooks
+│   │   ├── types/               # Shared TypeScript types
+│   │   └── App.css              # Design system
+│   ├── Dockerfile               # Multi-stage build (Node → Nginx)
+│   └── package.json
+├── Docs/                        # Architecture, plans, and session logs
+├── docker-compose.yml           # One-command full-stack deployment
+└── README.md
 ```
 
-## API Examples
+---
 
-### Health Check
+## 🔌 API Reference
 
-```bash
-curl http://localhost:8000/health
-```
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/health` | GET | Health check with token budget status |
+| `/api/plan` | POST | Generate a full travel itinerary |
+| `/api/book` | POST | Submit a booking request (Name, Email, Comment + Itinerary) |
+| `/api/tokens/status` | GET | Current Groq token usage |
+| `/api/plan/{id}` | GET | Retrieve saved plan *(Phase 10 — future)* |
 
-Response:
-```json
-{
-  "status": "ok",
-  "version": "0.1.0",
-  "timestamp": "2024-04-30T10:30:00",
-  "token_status": {
-    "daily_total": 15000,
-    "remaining": 85000,
-    "percent_used": 15.0,
-    "daily_limit": 100000
-  }
-}
-```
-
-### Create Travel Plan
+### Example Request
 
 ```bash
 curl -X POST http://localhost:8000/api/plan \
   -H "Content-Type: application/json" \
-  -d '{"request": "Plan a 5-day trip to Japan. Tokyo + Kyoto. $3,000 budget. Love food and temples, hate crowds."}'
+  -d '{"request": "Plan a 7-day trip to Thailand. ₹80,000 budget. Love temples, street food, and beaches."}'
 ```
 
-Response:
-```json
-{
-  "final_itinerary": {
-    "constraints": { "cities": ["Tokyo", "Kyoto"], "duration_days": 5, ... },
-    "days": [ ... ],
-    "neighborhoods": { "Tokyo": ["Asakusa"], "Kyoto": ["Gion"] },
-    "logistics_summary": "...",
-    "budget_rollup": { "grand_total": 2850, "within_budget": true },
-    "review_status": "pass",
-    "review_warnings": [],
-    "disclaimer": "Generated by AI Travel Planner. Verify prices before booking."
-  },
-  "constraints": { ... },
-  "review_summary": "pass",
-  "trace_id": "abc-123",
-  "processing_time_ms": 2500,
-  "used_stub_mode": false
-}
-```
+---
 
-### Error Response (Timeout)
-
-```json
-{
-  "error": "Agent timeout",
-  "detail": "Logistics agent timed out after 30s",
-  "trace_id": "abc-123"
-}
-```
-
-## Implementation Phases
-
-| Phase | Deliverable | Status |
-|-------|-------------|--------|
-| 0 | Project skeleton + health endpoint | ✅ Complete |
-| 1 | Shared data models/schemas | ✅ Complete |
-| 2 | LLM constraint extraction | ✅ Complete |
-| 3 | ToolRouter with stubs | ✅ Complete |
-| 4 | Worker agents (Destination/Logistics/Budget) | ✅ Complete |
-| 5 | Parallel execution + merge | ✅ Complete |
-| 6 | Review Agent | ✅ Complete |
-| 7 | Repair loop + stable API | ✅ Complete |
-| 8 | Hardening + demo polish | ✅ Complete |
-| 9 | Frontend application | ✅ Complete |
-| 10 | Extensions (optional) | Future |
-
-## Key Design Patterns
-
-1. **Constraints First**: One orchestrator pass extracts TravelConstraints; workers never re-parse NL
-2. **Typed Artifacts**: Pydantic/JSON Schema shared across all agent boundaries
-3. **Pipeline**: Orchestrator → parallel workers → merge → Review → (repair) → user
-4. **Hub-and-Spoke**: Only Orchestrator routes messages; no agent-to-agent communication
-5. **Bounded Retries**: Max 3 repair cycles (Phase 7)
-6. **Partial Failure**: Graceful degradation when agents timeout (Phase 8)
-7. **Observability**: Structured logging of prompts, tool calls, artifact versions (Phase 8)
-
-## Agent Pipeline
-
-```
-User Request
-    ↓
-Orchestrator.extract_constraints()
-    ↓
-DestinationAgent.research() ─┐
-                           ├─→ Parallel execution (async)
-LogisticsAgent.plan() ─────┘
-                           ↓
-                    merge() → DraftItinerary
-                           ↓
-                    ReviewAgent.review()
-                           ↓
-                 [fail] → repair() → [retry max 3x]
-                           ↓
-                    [pass] → FinalItinerary
-                           ↓
-                        User
-```
-
-## Configuration
-
-Environment variables (`.env`):
+## 🧪 Testing
 
 ```bash
-# Required
-GROQ_API_KEY=gsk_xxxxxxxxxxxx
+cd backend
 
-# Optional (defaults shown)
-APP_ENV=development
-LOG_LEVEL=INFO
-AGENT_TIMEOUT_SECONDS=30
-MAX_REVIEW_RETRIES=3
-CORS_ORIGINS=http://localhost:5173,http://localhost:3000
+# Run all tests
+pytest
 
-# Token budget (Groq = 100k/day)
-ENABLE_TOKEN_TRACKING=true
-MAX_TOKENS_PER_PLAN_REQUEST=15000
-TOKEN_BUFFER_PERCENT=20
+# Run specific test suites
+pytest tests/test_phase5.py -v    # Orchestration tests
+pytest tests/test_phase6.py -v    # Review agent tests
+pytest tests/test_edge_cases.py   # Edge case handling
 ```
 
-## Documentation
+---
 
-See `/Docs` folder:
-- **ProblemStatement.md**: Requirements and agent definitions
-- **Architecture.md**: System design, sequence diagrams, data flow
-- **ImplementationPlan.md**: 10-phase roadmap with exit criteria
-- **session_summary.md**: Development session log
-- **execution_summary.md**: Task completion tracking
+## 🐳 Deployment
 
-## Troubleshooting
+### Option 1: PaaS (Recommended)
 
-### Token Budget Exceeded
-```
-Check /health endpoint for token usage
-Wait until UTC midnight for reset
-```
+| Component | Platform | Root Directory |
+|-----------|----------|----------------|
+| Backend   | [Render](https://render.com) or [Railway](https://railway.app) | `backend` |
+| Frontend  | [Vercel](https://vercel.com) or [Netlify](https://netlify.com) | `frontend` |
 
-### Agent Timeout
-```
-Check AGENT_TIMEOUT_SECONDS in .env (default: 30s)
-Enable DEBUG logging to see which agent is slow
-```
+### Option 2: Docker
 
-### CORS Errors
-```
-Verify CORS_ORIGINS includes your frontend URL
-Check browser console for exact origin
+```bash
+# Set environment variables
+echo "GROQ_API_KEY=your_key" > .env
+echo "VITE_API_URL=http://localhost:8000/api" >> .env
+
+# Deploy
+docker compose up -d --build
 ```
 
-### LLM Not Available
-```
-System falls back to stub mode automatically
-Check GROQ_API_KEY is set in .env
-```
+See [Docs/DEPLOYMENT.md](Docs/DEPLOYMENT.md) for detailed step-by-step instructions.
+
+---
+
+## ⚙️ Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GROQ_API_KEY` | — | **Required.** Your Groq API key |
+| `AGENT_TIMEOUT_SECONDS` | `30` | Per-agent execution timeout |
+| `MAX_REVIEW_RETRIES` | `3` | Max repair cycles before returning best-effort |
+| `CORS_ORIGINS` | `localhost:5173` | Allowed frontend origins |
+| `ENABLE_TOKEN_TRACKING` | `true` | Track daily token consumption |
+| `TOKEN_BUFFER_PERCENT` | `20` | Reserve buffer before hitting Groq daily limit |
+
+---
+
+## 🎯 Design Principles
+
+1. **Constraints First** — One extraction pass; workers never re-parse natural language
+2. **Typed Artifacts** — Pydantic schemas shared across all agent boundaries
+3. **Hub-and-Spoke** — Only the Orchestrator routes messages; no agent-to-agent chatter
+4. **Bounded Retries** — Max 3 repair cycles to prevent infinite loops
+5. **Graceful Degradation** — Agent timeouts produce partial plans, not crashes
+6. **Static Fallbacks** — Curated activity catalogs ensure quality even without LLM access
+
+---
+
+## 📄 Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [ProblemStatement.md](Docs/ProblemStatement.md) | Original requirements and agent definitions |
+| [Architecture.md](Docs/Architecture.md) | System design, data flow, and deployment views |
+| [ImplementationPlan.md](Docs/ImplementationPlan.md) | 10-phase roadmap with exit criteria |
+| [DEPLOYMENT.md](Docs/DEPLOYMENT.md) | Hosting guide (Render, Vercel, Docker) |
+| [context.md](Docs/context.md) | Current project status and technical context |
+
+---
+
+## 🛠️ Built With
+
+- **Backend**: Python 3.11, FastAPI, Pydantic v2, asyncio
+- **Frontend**: React 18, TypeScript, Vite 5
+- **LLM**: Groq Cloud (LLaMA 3.3 70B Versatile)
+- **Deployment**: Docker, Nginx, docker-compose
+
+---
+
+## 📜 License
+
+This project was built as part of a Product Management challenge to demonstrate multi-agent AI system design and implementation.
+
+---
+
+<p align="center">
+  <b>Built with ❤️ by Kartik Mathur</b>
+</p>
