@@ -321,12 +321,23 @@ class OrchestratorAgent:
         return activity_catalog, logistics_output, budget_breakdown
     
     async def _run_agents_per_region(self, constraints, trip_structure, timeout_seconds, trace_id):
-        """Run agents per-region in PARALLEL, then merge results."""
+        """NEW: Run agents per-region, then merge results. From improvement.md."""
         from ..models import LogisticsOutput, ActivityCatalog, Activity, BudgetBreakdown, BudgetCategory
-
-        async def _process_one_region(region):
-            """Process a single region: runs destination, budget, logistics in parallel."""
-            print(f"  [Parallel] Processing region: {region.name} ({region.days} days)")
+        
+        all_activities = []
+        all_categories = []
+        all_movement_plans = []
+        all_lodging_plans = []
+        all_day_skeletons = []
+        grand_total = 0.0
+        total_transit = 0.0
+        per_city = {}
+        neighborhood_notes = {}
+        
+        for region in trip_structure.regions:
+            print(f"  Processing region: {region.name} ({region.days} days)")
+            
+            # Create region-scoped constraints
             region_constraints = TravelConstraints(
                 destination_region=constraints.destination_region,
                 cities=[region.base_location],
@@ -339,86 +350,57 @@ class OrchestratorAgent:
                 soft_preferences=constraints.soft_preferences,
                 is_road_trip=constraints.is_road_trip,
             )
-
-            # --- Destination (must run first so logistics can use it) ---
+            
+            # Run destination for this region
             try:
                 region_catalog = await asyncio.wait_for(
                     self.destination_agent.research(region_constraints),
                     timeout=timeout_seconds
                 )
+                all_activities.extend(region_catalog.activities)
+                per_city.update(region_catalog.per_city)
+                neighborhood_notes.update(region_catalog.neighborhood_notes)
             except Exception as e:
                 print(f"  Region {region.name} destination failed: {e}")
                 region_catalog = self.destination_agent._get_static_catalog_for_constraints(region_constraints)
-
-            # --- Budget + Logistics in parallel (both only need region_constraints) ---
-            budget_task = asyncio.wait_for(
-                self.budget_agent.analyze(region_constraints),
-                timeout=timeout_seconds
-            )
-            logistics_task = asyncio.wait_for(
-                self.logistics_agent.plan(region_constraints, region_catalog),
-                timeout=timeout_seconds
-            )
-            budget_result, logistics_result = await asyncio.gather(
-                budget_task, logistics_task, return_exceptions=True
-            )
-
-            return region_catalog, budget_result, logistics_result
-
-        # ── Run ALL regions in parallel ──────────────────────────────────────
-        region_results = await asyncio.gather(
-            *[_process_one_region(r) for r in trip_structure.regions],
-            return_exceptions=True
-        )
-
-        # ── Merge results ────────────────────────────────────────────────────
-        all_activities = []
-        all_categories = []
-        all_movement_plans = []
-        all_lodging_plans = []
-        all_day_skeletons = []
-        grand_total = 0.0
-        total_transit = 0.0
-        per_city = {}
-        neighborhood_notes = {}
-
-        for region, result in zip(trip_structure.regions, region_results):
-            if isinstance(result, Exception):
-                print(f"  Region {region.name} entirely failed: {result}")
-                continue
-
-            region_catalog, budget_result, logistics_result = result
-
-            # Catalog
-            all_activities.extend(region_catalog.activities)
-            per_city.update(region_catalog.per_city)
-            neighborhood_notes.update(region_catalog.neighborhood_notes)
-
-            # Budget
-            if not isinstance(budget_result, Exception):
-                all_categories.extend(budget_result.categories)
-                grand_total += budget_result.grand_total
-            else:
-                print(f"  Region {region.name} budget failed: {budget_result}")
-
-            # Logistics
-            if not isinstance(logistics_result, Exception):
-                all_lodging_plans.extend(logistics_result.lodging_plans)
-                all_movement_plans.extend(logistics_result.movement_plans)
-                all_day_skeletons.extend(logistics_result.day_skeletons)
-                total_transit += logistics_result.total_estimated_transit_hours
-            else:
-                print(f"  Region {region.name} logistics failed: {logistics_result}")
-
+                all_activities.extend(region_catalog.activities)
+                per_city.update(region_catalog.per_city)
+            
+            # Run budget for this region
+            try:
+                region_budget = await asyncio.wait_for(
+                    self.budget_agent.analyze(region_constraints),
+                    timeout=timeout_seconds
+                )
+                all_categories.extend(region_budget.categories)
+                grand_total += region_budget.grand_total
+            except Exception as e:
+                print(f"  Region {region.name} budget failed: {e}")
+            
+            # Run logistics for this region
+            try:
+                region_logistics = await asyncio.wait_for(
+                    self.logistics_agent.plan(region_constraints, region_catalog),
+                    timeout=timeout_seconds
+                )
+                all_lodging_plans.extend(region_logistics.lodging_plans)
+                all_movement_plans.extend(region_logistics.movement_plans)
+                all_day_skeletons.extend(region_logistics.day_skeletons)
+                total_transit += region_logistics.total_estimated_transit_hours
+            except Exception as e:
+                print(f"  Region {region.name} logistics failed: {e}")
+        
         # Resequence day numbers globally after merging all regions
         for i, skeleton in enumerate(all_day_skeletons):
             skeleton.day_number = i + 1
-
+        
+        # Merge all region results
         activity_catalog = ActivityCatalog(
             activities=all_activities,
             per_city=per_city,
             neighborhood_notes=neighborhood_notes
         )
+        
         logistics_output = LogisticsOutput(
             lodging_plans=all_lodging_plans,
             movement_plans=all_movement_plans,
@@ -426,6 +408,7 @@ class OrchestratorAgent:
             total_estimated_transit_hours=total_transit,
             logistics_summary=f"Route: {' → '.join(trip_structure.route)}"
         )
+        
         budget_breakdown = BudgetBreakdown(
             categories=all_categories,
             grand_total=round(grand_total, 2),
@@ -433,9 +416,9 @@ class OrchestratorAgent:
             within_budget=grand_total <= constraints.budget_total,
             remaining_buffer=round(max(0, constraints.budget_total - grand_total), 2)
         )
-
+        
         return activity_catalog, logistics_output, budget_breakdown
-
+    
     async def _run_logistics_with_timeout(self, constraints, activity_catalog, timeout_seconds, trace_id):
         """Run logistics agent with timeout and observability."""
         agent_start = time.time()
