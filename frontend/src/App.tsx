@@ -126,6 +126,9 @@ function App() {
   const [requestText, setRequestText] = useState('');
   const [healthStatus, setHealthStatus] = useState<string | null>(null);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [bookingForm, setBookingForm] = useState({ name: '', email: '', comment: '' });
+  const [bookingStatus, setBookingStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [bookingLoading, setBookingLoading] = useState(false);
   const { loading, error, traceId, submitPlan, checkBackendHealth, clearError } = usePlan();
 
   // Progress step simulation for long LLM calls
@@ -185,6 +188,38 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  const handleBookingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bookingForm.name || !bookingForm.email) return;
+    
+    setBookingLoading(true);
+    setBookingStatus(null);
+    
+    try {
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const res = await fetch(`${apiUrl}/api/book`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...bookingForm,
+          itinerary: response
+        })
+      });
+      
+      const data = await res.json();
+      if (res.ok) {
+        setBookingStatus({ type: 'success', message: data.message });
+        setBookingForm({ name: '', email: '', comment: '' });
+      } else {
+        setBookingStatus({ type: 'error', message: data.detail || 'Failed to send booking request' });
+      }
+    } catch (err) {
+      setBookingStatus({ type: 'error', message: 'Network error. Please try again later.' });
+    } finally {
+      setBookingLoading(false);
+    }
+  };
+
   // Home View
   if (view === 'home') {
     return (
@@ -212,15 +247,6 @@ function App() {
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
-                </svg>
-              </button>
-              <button className="icon-button">
-                <HeartIcon />
-              </button>
-              <button className="icon-button">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="8" r="5"/>
-                  <path d="M20 21a8 8 0 1 0-16 0"/>
                 </svg>
               </button>
             </div>
@@ -425,18 +451,6 @@ function App() {
             <a href="#" className="nav-link" style={{ color: '#1a1a1a' }} onClick={(e) => { e.preventDefault(); alert('Travel community coming soon!'); }}>Community</a>
           </nav>
           <div className="header-actions">
-            <button className="icon-button" style={{ color: '#1a1a1a' }}>
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8"/>
-                <path d="m21 21-4.35-4.35"/>
-              </svg>
-            </button>
-            <button className="icon-button" style={{ color: '#1a1a1a' }}>
-              <HeartIcon />
-            </button>
-            <button className="icon-button" style={{ background: '#1a1a1a', color: 'white', borderRadius: '20px', padding: '8px 16px' }}>
-              Sign in
-            </button>
           </div>
         </div>
       </header>
@@ -457,9 +471,6 @@ function App() {
             </div>
             <h1>Discover your perfect {constraints.duration_days}-day {allCities} itinerary</h1>
             <p className="itinerary-hero-subtitle">{heroSubtitle}</p>
-            <button className="explore-button">
-              Explore Full Itinerary <ArrowRightIcon />
-            </button>
           </div>
         </div>
 
@@ -661,14 +672,66 @@ function App() {
               
               <div className="validated-by">Validated by 4 AI agents</div>
               
-              <button
-                className="book-button"
-                style={{ opacity: 0.6, cursor: 'not-allowed' }}
-                title="Booking integration coming soon"
-                disabled
-              >
-                Book This Itinerary <ArrowRightIcon />
-              </button>
+              <div style={{ marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '20px' }}>
+                <div style={{ fontWeight: 600, marginBottom: '16px', fontSize: '16px', color: '#1a1a1a' }}>Book This Itinerary</div>
+                
+                {bookingStatus && (
+                  <div style={{ 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    marginBottom: '16px', 
+                    fontSize: '13px',
+                    background: bookingStatus.type === 'success' ? '#f0fdf4' : '#fef2f2',
+                    color: bookingStatus.type === 'success' ? '#166534' : '#991b1b',
+                    border: `1px solid ${bookingStatus.type === 'success' ? '#bbf7d0' : '#fecaca'}`
+                  }}>
+                    {bookingStatus.message}
+                  </div>
+                )}
+
+                <form onSubmit={handleBookingSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Full Name</label>
+                    <input 
+                      type="text" 
+                      required
+                      placeholder="John Doe"
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '14px' }}
+                      value={bookingForm.name}
+                      onChange={(e) => setBookingForm({ ...bookingForm, name: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Email Address</label>
+                    <input 
+                      type="email" 
+                      required
+                      placeholder="john@example.com"
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '14px' }}
+                      value={bookingForm.email}
+                      onChange={(e) => setBookingForm({ ...bookingForm, email: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>Comments / Special Requests</label>
+                    <textarea 
+                      placeholder="Tell us about any specific requirements..."
+                      rows={3}
+                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #e5e7eb', fontSize: '14px', resize: 'none' }}
+                      value={bookingForm.comment}
+                      onChange={(e) => setBookingForm({ ...bookingForm, comment: e.target.value })}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="book-button"
+                    disabled={bookingLoading}
+                    style={{ marginTop: '8px' }}
+                  >
+                    {bookingLoading ? 'Sending...' : 'Confirm Booking Request'} <ArrowRightIcon />
+                  </button>
+                </form>
+              </div>
               
               <div style={{ marginTop: '20px', borderTop: '1px solid #e5e7eb', paddingTop: '16px' }}>
                 <div style={{ fontWeight: 600, marginBottom: '12px', fontSize: '14px' }}>Trip Summary</div>
@@ -704,29 +767,6 @@ function App() {
         {/* Footer */}
         <footer className="footer">
           <div className="footer-content">
-            <div className="footer-top">
-              <div className="footer-brand">
-                <div className="footer-logo">
-                  <GlobeIcon />
-                  <span>GlobeAI</span>
-                </div>
-                <span className="footer-tagline">AI-powered travel planning</span>
-              </div>
-              <div className="footer-links">
-                <div className="footer-column">
-                  <div className="footer-column-title">Company</div>
-                  <a href="#" className="footer-link">About Us</a>
-                  <a href="#" className="footer-link">Careers</a>
-                  <a href="#" className="footer-link">Press</a>
-                </div>
-                <div className="footer-column">
-                  <div className="footer-column-title">Support</div>
-                  <a href="#" className="footer-link">Help Center</a>
-                  <a href="#" className="footer-link">Terms of Service</a>
-                  <a href="#" className="footer-link">Privacy Policy</a>
-                </div>
-              </div>
-            </div>
             <div className="footer-bottom">
               <div className="footer-logo">
                 <GlobeIcon />

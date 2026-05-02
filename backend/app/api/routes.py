@@ -21,7 +21,42 @@ from ..models import (
     JAPAN_5D_TOKYO_KYOTO_3000_CONSTRAINTS,
 )
 
+from pydantic import BaseModel
+
+class BookingRequest(BaseModel):
+    name: str
+    email: str
+    comment: str
+    itinerary: dict
+
 router = APIRouter()
+
+
+@router.post("/book", tags=["Booking"])
+async def book_itinerary(booking: BookingRequest):
+    """
+    Submit a booking request.
+    In a real app, this would send an email or store in a DB.
+    """
+    # Simulate sending email to mathurkartik@live.com
+    print(f"\n--- NEW BOOKING REQUEST ---")
+    print(f"To: mathurkartik@live.com")
+    print(f"From: {booking.name} <{booking.email}>")
+    print(f"Comment: {booking.comment}")
+    
+    # Summarize itinerary
+    final = booking.itinerary.get("final_itinerary", {})
+    constraints = booking.itinerary.get("constraints", {})
+    dest = constraints.get("destination_region", "Unknown")
+    days = constraints.get("duration_days", "Unknown")
+    budget = constraints.get("budget_total", "Unknown")
+    currency = constraints.get("currency", "INR")
+    
+    print(f"Trip: {days} days in {dest}")
+    print(f"Budget: {budget} {currency}")
+    print(f"--- END OF REQUEST ---\n")
+    
+    return {"status": "success", "message": "Your booking request has been sent to mathurkartik@live.com. We will contact you soon!"}
 
 
 @router.post("/plan", response_model=PlanResponse, tags=["Planning"])
