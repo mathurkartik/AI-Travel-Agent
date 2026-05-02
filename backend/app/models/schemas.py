@@ -4,12 +4,12 @@ Pydantic schemas defining contracts between all agents.
 Based on Architecture.md and ImplementationPlan.md Phase 1.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 # ============================================================================
@@ -110,8 +110,8 @@ class TravelConstraints(BaseModel):
             pass
         return v
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "destination_region": "Japan",
                 "cities": ["Tokyo", "Kyoto"],
@@ -124,6 +124,7 @@ class TravelConstraints(BaseModel):
                 "soft_preferences": ["authentic local food"]
             }
         }
+    )
 
 class Region(BaseModel):
     """A geographic region/segment of a trip."""
@@ -190,8 +191,8 @@ class Activity(BaseModel):
                 result.append(tag)
         return result
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "id": "tokyo-temple-001",
                 "name": "Senso-ji Temple",
@@ -205,6 +206,7 @@ class Activity(BaseModel):
                 "less_crowded_alternative": "tokyo-temple-002"
             }
         }
+    )
 
 
 class ActivityCatalog(BaseModel):
@@ -221,7 +223,7 @@ class ActivityCatalog(BaseModel):
         default_factory=dict,
         description="Notes about areas/neighborhoods per city"
     )
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     @field_validator("per_city")
     @classmethod
@@ -290,7 +292,7 @@ class LogisticsOutput(BaseModel):
     backtracking_minimized: bool = True
     total_estimated_transit_hours: float
     route_description: Optional[str] = Field(default=None, description="Overview of the road trip route if applicable")
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ============================================================================
@@ -335,7 +337,7 @@ class BudgetBreakdown(BaseModel):
     violations: List[BudgetViolation] = Field(default_factory=list, max_length=50)
     suggested_swaps: List[SuggestedSwap] = Field(default_factory=list, max_length=50)
     flags: List[str] = Field(default_factory=list, max_length=20)  # Warning strings
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     @field_validator("grand_total")
     @classmethod
@@ -449,7 +451,7 @@ class DraftItinerary(BaseModel):
         default_factory=list,
         description="Activity IDs used in this itinerary"
     )
-    merged_at: datetime = Field(default_factory=datetime.utcnow)
+    merged_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     version: int = 1  # For re-review cycles
 
 
@@ -489,7 +491,7 @@ class ReviewReport(BaseModel):
     advisory_warnings: List[str] = Field(default_factory=list)
     repair_hints: List[RepairHint] = Field(default_factory=list)
     qualitative_assessment: Optional[str] = None  # LLM narrative assessment
-    reviewed_at: datetime = Field(default_factory=datetime.utcnow)
+    reviewed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     
     @property
     def can_deliver(self) -> bool:
@@ -520,7 +522,7 @@ class FinalItinerary(BaseModel):
         default="This plan is illustrative. Prices and availability are estimates only. Verify before booking.",
         description="Safety disclaimer"
     )
-    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class PlanInsights(BaseModel):
@@ -528,6 +530,27 @@ class PlanInsights(BaseModel):
     strategic_insight: str
     budget_analysis: str
     cost_optimization_tips: List[str]
+    
+    @field_validator("strategic_insight", "budget_analysis", mode="before")
+    @classmethod
+    def coerce_to_string(cls, v):
+        """LLMs sometimes return a dict/list instead of a string. Coerce gracefully."""
+        if isinstance(v, dict):
+            import json
+            return json.dumps(v, indent=2)
+        if isinstance(v, list):
+            return "; ".join(str(item) for item in v)
+        return v
+    
+    @field_validator("cost_optimization_tips", mode="before")
+    @classmethod
+    def coerce_tips_to_list(cls, v):
+        """Ensure tips is always a list of strings."""
+        if isinstance(v, str):
+            return [v]
+        if isinstance(v, dict):
+            return [f"{k}: {val}" for k, val in v.items()]
+        return v
 
 
 # ============================================================================
@@ -565,7 +588,7 @@ class HealthResponse(BaseModel):
     """GET /health response."""
     status: Literal["healthy", "degraded", "unhealthy"] = "healthy"
     version: str = "0.1.0"
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     tokens: Optional[Dict[str, Any]] = None  # Token budget status
     llm_provider: str = "groq"  # Current LLM provider
     llm_available: bool = False  # Whether LLM is configured and ready

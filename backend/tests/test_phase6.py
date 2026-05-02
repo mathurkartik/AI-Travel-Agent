@@ -6,7 +6,7 @@ Two-layer design: Programmatic checks + optional LLM qualitative checks.
 """
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4
 
 from app.agents.review import ReviewAgent
@@ -336,9 +336,9 @@ class TestReviewReportStructure:
     @pytest.mark.asyncio
     async def test_report_has_review_timestamp(self, review_agent, valid_draft, sample_constraints):
         """Report should have reviewed_at timestamp."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         report = await review_agent.review(valid_draft, sample_constraints)
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
         
         assert before <= report.reviewed_at <= after
     

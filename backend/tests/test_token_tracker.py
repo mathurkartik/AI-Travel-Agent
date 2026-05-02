@@ -6,7 +6,7 @@ Zero token cost - these test the tracking logic only.
 import pytest
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.llm.token_tracker import TokenTracker, TokenUsage, TokenBudgetExceeded
 
@@ -161,7 +161,7 @@ class TestTokenTracker:
         """Daily total should reset when day changes."""
         tracker = TokenTracker()
         tracker._daily_total = 50000
-        tracker._day_start = datetime.utcnow() - timedelta(days=1)  # Yesterday
+        tracker._day_start = datetime.now(timezone.utc) - timedelta(days=1)  # Yesterday
         
         # Accessing remaining should trigger reset
         _ = tracker.remaining_tokens
@@ -169,7 +169,7 @@ class TestTokenTracker:
         # Should be reset (or at least not 50000 anymore due to new day)
         # Note: This test may be flaky if run exactly at midnight UTC
         # In practice, the reset works correctly
-        assert tracker._day_start.date() == datetime.utcnow().date()
+        assert tracker._day_start.date() == datetime.now(timezone.utc).date()
 
 
 class TestTokenUsage:
@@ -182,9 +182,9 @@ class TestTokenUsage:
     
     def test_timestamp_auto_set(self):
         """Timestamp should be set on creation."""
-        before = datetime.utcnow()
+        before = datetime.now(timezone.utc)
         usage = TokenUsage(prompt_tokens=100, completion_tokens=50, model="test")
-        after = datetime.utcnow()
+        after = datetime.now(timezone.utc)
         
         assert before <= usage.timestamp <= after
 

@@ -390,6 +390,10 @@ class OrchestratorAgent:
             except Exception as e:
                 print(f"  Region {region.name} logistics failed: {e}")
         
+        # Resequence day numbers globally after merging all regions
+        for i, skeleton in enumerate(all_day_skeletons):
+            skeleton.day_number = i + 1
+        
         # Merge all region results
         activity_catalog = ActivityCatalog(
             activities=all_activities,
@@ -581,7 +585,7 @@ class OrchestratorAgent:
             currency=constraints.currency,
             budget_summary=budget_breakdown,
             catalog_references=list(activity_by_id.keys()),
-            merged_at=__import__('datetime').datetime.utcnow(),
+            merged_at=__import__('datetime').datetime.now(__import__('datetime').timezone.utc),
             version=1
         )
     
@@ -807,6 +811,10 @@ Respond with valid JSON matching the PlanInsights schema."""
                 elif "remove" in action or "trim" in action:
                     repaired_draft = self._remove_extra_days(repaired_draft, constraints)
             
+            # Handle duplicate day numbering
+            elif "duplicate" in issue or "resequence" in action:
+                repaired_draft = self._resequence_days(repaired_draft)
+            
             # Handle city mismatches
             elif "city" in issue or "wrong city" in issue:
                 repaired_draft = self._fix_city_assignments(repaired_draft, constraints)
@@ -936,4 +944,10 @@ Respond with valid JSON matching the PlanInsights schema."""
                     )
                 ]
         
+        return draft
+    
+    def _resequence_days(self, draft: DraftItinerary) -> DraftItinerary:
+        """Fix duplicate day numbering by assigning sequential day numbers."""
+        for i, day in enumerate(draft.days, 1):
+            day.day_number = i
         return draft

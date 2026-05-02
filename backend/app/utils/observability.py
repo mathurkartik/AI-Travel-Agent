@@ -6,7 +6,7 @@ Avoids logging full secrets (API keys, user PII).
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional, List
 from functools import wraps
 import time
@@ -28,7 +28,7 @@ class ObservabilityLogger:
             "event": "agent_start",
             "agent": agent_name,
             "trace_id": trace_id,
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "context_keys": list(context.keys())
         })
     
@@ -44,7 +44,7 @@ class ObservabilityLogger:
             "duration_ms": duration_ms,
             "artifact_version": artifact_version,
             "success": success,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         if error_type:
             extra["error_type"] = error_type
@@ -67,7 +67,7 @@ class ObservabilityLogger:
             "user_chars": user_chars,
             "model": model,
             "estimated_tokens": estimated_tokens,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     
     @staticmethod
@@ -83,7 +83,7 @@ class ObservabilityLogger:
             "response_tokens": response_tokens,
             "duration_ms": duration_ms,
             "cached": cached,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     
     @staticmethod
@@ -98,7 +98,7 @@ class ObservabilityLogger:
             "input_summary": input_summary[:100],  # Truncate
             "success": success,
             "duration_ms": duration_ms,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
         if error:
             extra["error"] = error[:200]  # Truncate error
@@ -120,7 +120,7 @@ class ObservabilityLogger:
             "blocking_count": blocking_count,
             "advisory_count": advisory_count,
             "repair_hints_count": repair_hints_count,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     
     @staticmethod
@@ -133,7 +133,7 @@ class ObservabilityLogger:
             "repair_cycle": repair_cycle,
             "hints_processed": hints_processed,
             "actions_taken": actions_taken,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     
     @staticmethod
@@ -146,7 +146,7 @@ class ObservabilityLogger:
             "failed_agent": agent_name,
             "fallback_action": fallback_action,
             "user_message": user_message,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
     
     @staticmethod
@@ -162,7 +162,7 @@ class ObservabilityLogger:
             "repair_cycles": repair_cycles,
             "days_count": days_count,
             "cities_count": cities_count,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         })
 
 

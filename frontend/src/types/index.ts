@@ -154,6 +154,9 @@ export interface FinalItinerary {
   days: DayItinerary[];
   neighborhoods: Record<string, string[]>;
   logistics_summary: string;
+  strategic_insight?: string;
+  budget_analysis?: string;
+  cost_optimization_tips?: string[];
   budget_rollup: BudgetBreakdown;
   review_status: ReviewStatus;
   review_warnings: string[];
@@ -180,6 +183,12 @@ export interface PlanResponse {
 
 export interface HealthResponse {
   status: 'healthy' | 'degraded' | 'unhealthy';
-  version: string;
-  timestamp: string;
+  llm_provider: string;
+  llm_available: boolean;
+  tokens?: {
+    daily_total: number;
+    remaining: number;
+    percent_used: number;
+    daily_limit: number;
+  };
 }

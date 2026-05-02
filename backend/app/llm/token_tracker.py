@@ -5,7 +5,7 @@ Provides daily budget management with safety buffers.
 
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from functools import lru_cache
 
@@ -18,7 +18,7 @@ class TokenUsage:
         self.completion_tokens = completion_tokens
         self.total_tokens = prompt_tokens + completion_tokens
         self.model = model
-        self.timestamp = datetime.utcnow()
+        self.timestamp = datetime.now(timezone.utc)
 
 
 class TokenTracker:
@@ -35,15 +35,15 @@ class TokenTracker:
     DAILY_LIMIT = 100000  # Groq free tier: 100k tokens/day
     
     def __init__(self, buffer_percent: int = 20):
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._usage_history: list[TokenUsage] = []
         self._daily_total = 0
         self._buffer_percent = buffer_percent
-        self._day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        self._day_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         
     def _reset_if_new_day(self):
         """Reset counter if we've crossed midnight UTC."""
-        current_day = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        current_day = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
         if current_day > self._day_start:
             with self._lock:
                 self._daily_total = 0

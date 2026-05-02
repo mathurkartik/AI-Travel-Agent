@@ -120,17 +120,26 @@ async def create_plan(request: Request, plan_request: PlanRequest):
             if days_match:
                 duration = int(days_match.group(1))
         
-        # ── Extract budget ─────────────────────────────────────────────────
+        # ── Extract budget & currency ───────────────────────────────────────
         budget = 50000
+        currency = "INR"
         budget_patterns = [
-            r'[\$€£₹]\s*([\d,]+)',
-            r'([\d,]+)\s*(?:INR|USD|EUR|GBP|budget)',
-            r'budget\s*[\$€£₹]?\s*([\d,]+)',
+            (r'\$\s*([\d,]+)', 'USD'),
+            (r'€\s*([\d,]+)', 'EUR'),
+            (r'£\s*([\d,]+)', 'GBP'),
+            (r'¥\s*([\d,]+)', 'JPY'),
+            (r'₹\s*([\d,]+)', 'INR'),
+            (r'([\d,]+)\s*USD', 'USD'),
+            (r'([\d,]+)\s*EUR', 'EUR'),
+            (r'([\d,]+)\s*GBP', 'GBP'),
+            (r'([\d,]+)\s*INR', 'INR'),
+            (r'([\d,]+)\s*(?:budget)', 'INR'),
         ]
-        for pat in budget_patterns:
+        for pat, cur in budget_patterns:
             bm = re.search(pat, request_text, re.IGNORECASE)
             if bm:
                 budget = int(bm.group(1).replace(',', ''))
+                currency = cur
                 break
 
         primary_city = cities[0]
@@ -145,6 +154,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
             "ireland": ["Dublin", "Galway", "Cliffs of Moher", "Ring of Kerry", "Cork", "Killarney"],
             "portugal": ["Lisbon", "Sintra", "Porto", "Douro Valley", "Algarve"],
             "switzerland": ["Zurich", "Lucerne", "Interlaken", "Zermatt", "Geneva"],
+            "japan": ["Tokyo", "Hakone", "Kyoto", "Nara", "Osaka"],
         }
         
         ROUTE_DAY_THEMES = {
@@ -165,20 +175,41 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                 ("Borgarnes", "West Iceland & Settlement Center", "Visit the Settlement Center in Borgarnes. Explore Hraunfossar and Barnafoss waterfalls. Discover Deildartunguhver, Europe's most powerful hot spring."),
                 ("Reykjavik", "Return & Farewell", "Return to Reykjavik. Last-minute shopping on Laugavegur street. Visit any missed city attractions. Enjoy a farewell dinner at a top Reykjavik restaurant."),
             ],
+            "thailand": [
+                ("Bangkok", "Grand Palace & Riverside", "Explore the majestic Grand Palace and Wat Phra Kaew. Take a long-tail boat along the Chao Phraya River and visit Wat Arun (Temple of Dawn)."),
+                ("Bangkok", "Street Food & Markets", "Experience the vibrant energy of Yaowarat (Chinatown). Sample world-famous street food and explore the bustling flower market and local canals."),
+                ("Chiang Mai", "Old City & Temples", "Discover the ancient temples of Chiang Mai's Old City. Visit Wat Chedi Luang and Wat Phra Singh. Enjoy a traditional Khantoke dinner."),
+                ("Chiang Mai", "Nature & Mountains", "Visit Doi Suthep Temple for panoramic views. Explore the lush gardens of Bhubing Palace and meet elephants at an ethical sanctuary."),
+                ("Krabi", "Island Hopping & Beaches", "Take a boat tour to the Four Islands (Koh Poda, Chicken Island, Tup Island, Phranang Cave). Relax on the white sands of Railay Beach."),
+                ("Phuket", "Old Town & Sunset Points", "Wander through the colorful streets of Phuket Old Town. Visit the Big Buddha and catch a spectacular sunset at Promthep Cape."),
+            ],
+            "india": [
+                ("Delhi", "Historical Landmarks", "Visit the Red Fort, Jama Masjid, and Raj Ghat. Explore the bustling markets of Chandni Chowk in Old Delhi."),
+                ("Agra", "Taj Mahal & Agra Fort", "Witness the sunrise at the iconic Taj Mahal. Explore the grand Agra Fort and visit the tomb of Itmad-ud-Daulah."),
+                ("Jaipur", "Pink City Exploration", "Visit the Amber Fort, Hawa Mahal (Palace of Winds), and the City Palace. Shop for traditional handicrafts and jewelry."),
+                ("Udaipur", "City of Lakes", "Enjoy a boat ride on Lake Pichola. Visit the stunning City Palace and the Jagdish Temple."),
+                ("Goa", "Beaches & Old Goa", "Relax on the golden sands of Calangute or Baga beach. Visit the historic churches of Old Goa, including the Basilica of Bom Jesus."),
+            ]
         }
         
-        # Detect if this is a road trip destination
+        # Detect if this is a road trip destination or a major country
         is_road_trip = dest_lower in ROAD_TRIP_ROUTES
         if is_road_trip:
             route_stops = ROAD_TRIP_ROUTES[dest_lower]
             cities = route_stops[:min(6, len(route_stops))]
+        elif dest_lower == "thailand":
+            cities = ["Bangkok", "Chiang Mai", "Krabi", "Phuket"]
+        elif dest_lower == "india":
+            cities = ["Delhi", "Agra", "Jaipur", "Udaipur", "Goa"]
+        elif dest_lower == "japan":
+            cities = ["Tokyo", "Kyoto", "Osaka", "Hakone"]
         
         stub_constraints = TravelConstraints(
             destination_region=primary_city,
-            cities=cities,
+            cities=cities if cities else [primary_city],
             duration_days=duration,
             budget_total=budget,
-            currency="INR",
+            currency=currency,
             preferences=["Nature", "Scenic drives", "Local cuisine", "Adventure"] if is_road_trip else ["Cultural experiences", "Local cuisine", "Sightseeing"],
             avoidances=[],
             hard_requirements=[],
@@ -190,6 +221,10 @@ async def create_plan(request: Request, plan_request: PlanRequest):
         stub_days = []
         day_themes = ROUTE_DAY_THEMES.get(dest_lower, [])
         
+        # Ensure we have at least one city
+        if not cities:
+            cities = [primary_city]
+            
         for day_num in range(1, duration + 1):
             if day_num == 1:
                 day_items = [
@@ -238,22 +273,22 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                         activity_id=f"afternoon-{day_num}",
                         activity_name=f"Afternoon in {region}",
                         city=region, type=ActivityType.FOOD, cost_estimate=40.0,
-                        notes=f"Enjoy lunch featuring local {primary_city} cuisine. Continue exploring the {region} area. Capture photos of the dramatic landscapes. Drive to your evening accommodation."),
+                        notes=f"Enjoy lunch featuring local {region} cuisine. Continue exploring the {region} area. Capture photos of the landmarks."),
                 ]
                 day_summary = f"Day {day_num}: {title}"
                 day_cost = 80.0
             else:
                 # Varied generic days (rotate themes)
                 themes = [
-                    ("Nature & Scenic Exploration", ActivityType.NATURE, f"Explore the natural landscapes around {primary_city}. Hike trails, visit viewpoints, and discover hidden waterfalls or coastline."),
+                    ("Nature & Scenic Exploration", ActivityType.NATURE, f"Explore the natural landscapes around {primary_city}. Hike trails, visit viewpoints, and discover hidden gems."),
                     ("Cultural Heritage & Museums", ActivityType.MUSEUM, f"Visit {primary_city}'s most important museums and cultural sites. Learn about local history, art, and traditions."),
                     ("Local Markets & Food Tour", ActivityType.FOOD, f"Spend the day exploring local food markets, trying street food, and visiting artisan shops in {primary_city}."),
-                    ("Adventure & Outdoor Activities", ActivityType.NATURE, f"Engage in outdoor activities: hiking, cycling, kayaking, or guided nature walks in the {primary_city} region."),
-                    ("Neighborhoods & Hidden Gems", ActivityType.OTHER, f"Explore lesser-known neighborhoods and off-the-beaten-path attractions in {primary_city}."),
+                    ("Adventure & Outdoor Activities", ActivityType.NATURE, f"Engage in outdoor activities: hiking, cycling, kayaking, or guided nature walks."),
+                    ("Neighborhoods & Hidden Gems", ActivityType.OTHER, f"Explore lesser-known neighborhoods and off-the-beaten-path attractions."),
                 ]
                 theme_idx = (day_num - 2) % len(themes)
                 title, atype, desc = themes[theme_idx]
-                day_city = cities[min(day_num % len(cities), len(cities) - 1)] if is_road_trip else primary_city
+                day_city = cities[min(day_num % len(cities), len(cities) - 1)] if is_road_trip or len(cities) > 1 else primary_city
                 day_items = [
                     DayItineraryItem(slot_index=0, time="09:00 - 13:00",
                         activity_id=f"explore-{day_num}",
@@ -264,10 +299,11 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                         activity_id=f"evening-{day_num}",
                         activity_name=f"Evening in {day_city}",
                         city=day_city, type=ActivityType.FOOD, cost_estimate=40.0,
-                        notes=f"Enjoy local dining and evening atmosphere in {day_city}. Return to accommodation for overnight stay."),
+                        notes=f"Enjoy local dining and evening atmosphere in {day_city}."),
                 ]
                 day_summary = f"Day {day_num}: {title} in {day_city}"
                 day_cost = 80.0
+
             
             stub_days.append(DayItinerary(
                 day_number=day_num, city=day_city,
@@ -291,17 +327,17 @@ async def create_plan(request: Request, plan_request: PlanRequest):
             neighborhoods=neighborhoods,
             logistics_summary=("Ring Road self-drive route" if is_road_trip else f"Explore {primary_city} with local transport"),
             strategic_insight=(f"This {duration}-day itinerary covers the full {primary_city} Ring Road route with balanced pacing — no burnout, maximum coverage." if is_road_trip and dest_lower == "iceland" else None),
-            budget_analysis=f"Your budget of {budget:,} INR for {duration} days is {'comfortable for a mid-range experience' if budget >= duration * daily_rate * 0.8 else 'tight — consider budget accommodations'}.",
+            budget_analysis=f"Your budget of {budget:,} {currency} for {duration} days is {'comfortable for a mid-range experience' if budget >= duration * daily_rate * 0.8 else 'tight — consider budget accommodations'}.",
             cost_optimization_tips=["Book accommodation early for best rates", "Cook some meals if self-catering available", "Look for free natural attractions"] if is_road_trip else ["Use public transport over taxis", "Eat at local restaurants instead of tourist spots"],
             budget_rollup=BudgetBreakdown(
                 categories=[
-                    BudgetCategory(category="stay", estimated_total=duration * daily_rate * 0.35, currency="INR", notes=f"{duration} nights ({primary_city} region)"),
-                    BudgetCategory(category="food", estimated_total=duration * daily_rate * 0.2, currency="INR", notes="Daily meals"),
-                    BudgetCategory(category="activities", estimated_total=duration * daily_rate * 0.2, currency="INR", notes="Attractions and experiences"),
-                    BudgetCategory(category="transport", estimated_total=duration * daily_rate * 0.25, currency="INR", notes=("SUV rental + fuel" if is_road_trip else "Local transport")),
+                    BudgetCategory(category="stay", estimated_total=duration * daily_rate * 0.35, currency=currency, notes=f"{duration} nights ({primary_city} region)"),
+                    BudgetCategory(category="food", estimated_total=duration * daily_rate * 0.2, currency=currency, notes="Daily meals"),
+                    BudgetCategory(category="activities", estimated_total=duration * daily_rate * 0.2, currency=currency, notes="Attractions and experiences"),
+                    BudgetCategory(category="transport", estimated_total=duration * daily_rate * 0.25, currency=currency, notes=("SUV rental + fuel" if is_road_trip else "Local transport")),
                 ],
                 grand_total=duration * daily_rate,
-                currency="INR",
+                currency=currency,
                 within_budget=budget >= (duration * daily_rate),
                 remaining_buffer=max(0, budget - (duration * daily_rate))
             ),

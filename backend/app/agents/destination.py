@@ -480,12 +480,12 @@ Focus on:
                     rationale="UNESCO World Heritage historic wharf in Bergen",
                     tags=["history", "unesco", "bergen"],
                     address="Bryggen, Bergen"
-                )
+                ),
             ]
-        elif city_lower in ["thailand", "bangkok", "phuket"]:
+        elif city_lower in ["thailand", "bangkok"]:
             activities = [
                 Activity(
-                    id="thailand-grand-palace",
+                    id="thailand-bangkok-grand-palace",
                     name="Grand Palace",
                     city=city,
                     type=ActivityType.TEMPLE,

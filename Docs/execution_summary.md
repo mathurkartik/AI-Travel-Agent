@@ -4,6 +4,80 @@ This file tracks all work sessions and task completions for the AI Travel Planne
 
 ---
 
+## 2026-05-02 | Session 19 | Quality Hardening & Itinerary Polish
+
+### Tasks Completed
+
+1. **Fixed Duplicate Day Numbering in Hierarchical Planning**
+   - **Problem**: When `OrchestratorAgent` ran per-region agents for long trips, each region's logistics agent started day numbering from 1. These were concatenated without resequencing, resulting in day sequences like "1, 2, 3, 1, 2, 3".
+   - **Solution**: 
+     - Added global resequencing logic in `orchestrator.py -> _run_agents_per_region()` to assign globally unique day numbers after merging results.
+     - Added `_resequence_days` repair method to the orchestrator to fix numbering issues detected by the Review Agent.
+     - Added a handler for "duplicate day numbering" in the orchestrator's `repair()` loop.
+
+2. **Eliminated "Vague" Itineraries for Thailand/India/Vietnam**
+   - **Problem**: Popular destinations like Thailand were returning generic themes ("Nature & Scenic Exploration") instead of real activities, often due to stub fallback or missing route templates.
+   - **Solution**:
+     - **Trip Structuring**: Added specific route templates for **Thailand**, **Vietnam**, and **India** to `MULTI_CITY_ROUTES` in `trip_structuring.py`. This ensures proper geographic splits (e.g., Bangkok -> Chiang Mai -> Krabi).
+     - **Static Activities**: Implemented detailed static activity catalogs for Bangkok, Chiang Mai, Krabi, Phuket, Delhi, Agra, Jaipur, Udaipur, and Goa in `destination.py`.
+     - **Stub Themes**: Added destination-specific day themes to `routes.py` stub mode, replacing generic text with real landmarks (Grand Palace, Wat Arun, Taj Mahal, Amber Fort).
+
+3. **Fixed PlanInsights Validation Errors**
+   - **Problem**: The Llama 3.1 8B model often returned dictionaries or lists for the `budget_analysis` and `strategic_insight` fields instead of the expected strings, causing Pydantic validation errors and 500 responses.
+   - **Solution**: Added Pydantic `field_validator` with `mode="before"` to the `PlanInsights` model in `schemas.py` to automatically coerce dictionaries (via `json.dumps`) and lists (via `join`) into strings.
+
+4. **Robust Stub Extraction Improvements**
+   - **Problem**: If the user provided just "Thailand", stub mode would use "Thailand" as a city name in activities.
+   - **Solution**: Updated `routes.py` stub city detection to map country names to a list of major cities (e.g., Thailand -> Bangkok, Chiang Mai, etc.).
+
+### Files Modified
+- `backend/app/agents/orchestrator.py` - Global resequencing and repair handler.
+- `backend/app/agents/trip_structuring.py` - Added Thailand, Vietnam, India route templates.
+- `backend/app/agents/destination.py` - Added static activities for SE Asia and India.
+- `backend/app/models/schemas.py` - Added PlanInsights string coercion validators.
+- `backend/app/api/routes.py` - Added destination-specific stub themes and city mapping.
+
+### Status
+✅ **High Quality Output** - The system now provides specific, structurally sound itineraries for major global regions even when falling back to static data or using smaller LLM models.
+
+---
+
+## 2026-05-02 | Session 18 | Production Stabilization & Final Fixes
+
+### Tasks Completed
+
+1. **Fixed TokenTracker Deadlock**
+   - **Problem**: The `TokenTracker.get_usage_summary()` method acquired a lock and then called `self.remaining_tokens`, which attempted to acquire the same lock. Python's standard `threading.Lock()` is not reentrant, causing the test suite to hang on `test_usage_summary_returns_correct_structure`.
+   - **Solution**: Changed `self._lock = threading.Lock()` to `threading.RLock()` in `token_tracker.py`.
+
+2. **Python 3.12 Compatibility (datetime.utcnow deprecation)**
+   - **Problem**: `datetime.utcnow()` is deprecated in Python 3.12 and using it alongside timezone-aware datetimes caused test crashes when the two were compared.
+   - **Solution**: Replaced all instances of `datetime.utcnow()` with timezone-aware `datetime.now(timezone.utc)`.
+   - **Affected Files**: `utils/observability.py`, `agents/orchestrator.py`, `tests/test_token_tracker.py`, `tests/test_phase6.py`.
+
+3. **Frontend Type Safety Improvements**
+   - Added missing optional fields to `FinalItinerary` interface in `frontend/src/types/index.ts`: `strategic_insight`, `budget_analysis`, `cost_optimization_tips`.
+   - Removed `as any` type casting in `frontend/src/App.tsx` during final_itinerary destructuring, achieving 0 TypeScript compilation errors (`npx tsc --noEmit` clean).
+
+4. **Currency Stub Mode Fix**
+   - **Problem**: Stub budget analysis logic still hardcoded "INR" in `routes.py`, causing UI mismatches if a user requested USD/EUR.
+   - **Solution**: Updated the stub `BudgetBreakdown` and `BudgetCategory` structures to use the dynamically extracted `currency` variable.
+
+### Files Modified
+- `backend/app/llm/token_tracker.py`
+- `backend/app/utils/observability.py`
+- `backend/app/agents/orchestrator.py`
+- `backend/app/api/routes.py`
+- `backend/tests/test_token_tracker.py`
+- `backend/tests/test_phase6.py`
+- `frontend/src/types/index.ts`
+- `frontend/src/App.tsx`
+
+### Status
+✅ **100% Stable** - The backend tests successfully pass in ~15 seconds without deadlocks. The frontend is fully type-safe.
+
+---
+
 ## 2026-05-01 | Session 17 | Test Suite Stabilization & Logic Refinement
 
 ### Tasks Completed

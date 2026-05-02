@@ -270,10 +270,16 @@ class TestOrchestratorHierarchical:
         orchestrator._run_agents_per_region = AsyncMock(wraps=orchestrator._run_agents_per_region)
         orchestrator._run_agents_flat = AsyncMock(wraps=orchestrator._run_agents_flat)
         
-        await orchestrator.create_plan("10 days in Iceland")
+        result = await orchestrator.create_plan("10 days in Iceland")
         
         assert orchestrator._run_agents_per_region.called
         assert not orchestrator._run_agents_flat.called
+        
+        # Integration assertions
+        assert len(result.days) == 10
+        assert result.constraints.duration_days == 10
+        assert result.budget_rollup.grand_total > 0
+        assert result.budget_rollup.currency == "USD"
 
     @pytest.mark.asyncio
     async def test_uses_flat_for_short_trip(self, sample_constraints):
@@ -284,10 +290,14 @@ class TestOrchestratorHierarchical:
         orchestrator._run_agents_per_region = AsyncMock(wraps=orchestrator._run_agents_per_region)
         orchestrator._run_agents_flat = AsyncMock(wraps=orchestrator._run_agents_flat)
         
-        await orchestrator.create_plan("5 days in Japan")
+        result = await orchestrator.create_plan("5 days in Japan")
         
         assert not orchestrator._run_agents_per_region.called
         assert orchestrator._run_agents_flat.called
+        
+        # Integration assertions
+        assert len(result.days) == 5
+        assert result.constraints.duration_days == 5
 
 
 if __name__ == "__main__":

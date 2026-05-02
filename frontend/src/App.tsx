@@ -118,26 +118,65 @@ const POPULAR_DESTINATIONS = [
   },
 ];
 
-const PROPERTY_TYPES = [
-  { name: 'Hotels', count: '12,453 properties', image: 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=400' },
-  { name: 'Apartments', count: '5,832 properties', image: 'https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=400' },
-];
+
 
 function App() {
   const [view, setView] = useState<'home' | 'result'>('home');
   const [response, setResponse] = useState<PlanResponse | null>(null);
   const [requestText, setRequestText] = useState('');
+  const [healthStatus, setHealthStatus] = useState<string | null>(null);
+  const [loadingStep, setLoadingStep] = useState(0);
   const { loading, error, traceId, submitPlan, checkBackendHealth, clearError } = usePlan();
+
+  // Progress step simulation for long LLM calls
+  const LOADING_STEPS = [
+    '🔍 Extracting your travel constraints...',
+    '🗺️ Destination agent researching attractions...',
+    '🚆 Logistics agent planning routes & stays...',
+    '💰 Budget agent calculating costs...',
+    '✅ Review agent validating itinerary...',
+  ];
+
+  const startLoadingProgress = () => {
+    setLoadingStep(0);
+    let step = 0;
+    const interval = setInterval(() => {
+      step += 1;
+      if (step < LOADING_STEPS.length) {
+        setLoadingStep(step);
+      } else {
+        clearInterval(interval);
+      }
+    }, 5000);
+    return interval;
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!requestText.trim()) return;
-    
+    const interval = startLoadingProgress();
     const result = await submitPlan(requestText);
+    clearInterval(interval);
     if (result) {
       setResponse(result);
       setView('result');
     }
+  };
+
+  const handleHealthCheck = async () => {
+    setHealthStatus('Checking...');
+    const health = await checkBackendHealth();
+    if (health) {
+      const remaining = (health as any).tokens?.remaining;
+      const provider = (health as any).llm_provider ?? 'groq';
+      const msg = remaining != null
+        ? `✅ Backend online · ${provider.toUpperCase()} · ${remaining.toLocaleString()} tokens remaining`
+        : `✅ Backend online · ${provider.toUpperCase()}`;
+      setHealthStatus(msg);
+    } else {
+      setHealthStatus('❌ Backend offline or unreachable');
+    }
+    setTimeout(() => setHealthStatus(null), 5000);
   };
 
   const handleDestinationClick = (destination: string) => {
@@ -159,12 +198,17 @@ function App() {
             </div>
             <nav className="nav-links">
               <a href="#" className="nav-link active">Explore</a>
-              <a href="#" className="nav-link">My Trips</a>
-              <a href="#" className="nav-link">Destinations</a>
-              <a href="#" className="nav-link">Support</a>
+              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); alert('My Trips feature coming soon!'); }}>My Trips</a>
+              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); alert('Destinations explorer coming soon!'); }}>Destinations</a>
+              <a href="#" className="nav-link" onClick={(e) => { e.preventDefault(); alert('Support center coming soon!'); }}>Support</a>
             </nav>
-            <div className="header-actions">
-              <button className="icon-button" onClick={checkBackendHealth} title="Check Backend Health">
+          <div className="header-actions">
+              {healthStatus && (
+                <span style={{ fontSize: '12px', color: healthStatus.startsWith('✅') ? '#16a34a' : '#dc2626', padding: '4px 8px', background: '#f9fafb', borderRadius: '6px', border: '1px solid #e5e7eb' }}>
+                  {healthStatus}
+                </span>
+              )}
+              <button className="icon-button" onClick={handleHealthCheck} title="Check Backend Health">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
                   <polyline points="22 4 12 14.01 9 11.01"/>
@@ -223,22 +267,28 @@ function App() {
                 )}
               </button>
             </form>
+            {loading && (
+              <div style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(255,255,255,0.12)', borderRadius: '10px', backdropFilter: 'blur(8px)', color: '#fff', fontSize: '14px' }}>
+                {LOADING_STEPS[loadingStep]}
+              </div>
+            )}
           </div>
         </section>
 
-        {/* Property Types */}
+        {/* How It Works */}
         <section className="section">
-          <h2 className="section-title">Browse by property type</h2>
+          <h2 className="section-title">How GlobeAI Works</h2>
           <div className="property-grid">
-            {PROPERTY_TYPES.map((type) => (
-              <div key={type.name} className="property-card">
-                <img src={type.image} alt={type.name} className="property-card-image" />
-                <div className="property-card-overlay">
-                  <div className="property-card-title">{type.name}</div>
-                  <div className="property-card-count">{type.count}</div>
-                </div>
-              </div>
-            ))}
+            <div className="property-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '32px', background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)', textAlign: 'center', gap: '12px' }}>
+              <div style={{ fontSize: '36px' }}>✍️</div>
+              <div style={{ color: '#ffc107', fontWeight: 700, fontSize: '16px' }}>1. Describe Your Trip</div>
+              <div style={{ color: '#9ca3af', fontSize: '13px' }}>Type your destination, duration, budget and preferences in plain English.</div>
+            </div>
+            <div className="property-card" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '32px', background: 'linear-gradient(135deg, #0f3460 0%, #16213e 100%)', textAlign: 'center', gap: '12px' }}>
+              <div style={{ fontSize: '36px' }}>🤖</div>
+              <div style={{ color: '#ffc107', fontWeight: 700, fontSize: '16px' }}>2. AI Agents Collaborate</div>
+              <div style={{ color: '#9ca3af', fontSize: '13px' }}>Five specialized agents research destinations, plan logistics, and optimize your budget — in parallel.</div>
+            </div>
           </div>
         </section>
 
@@ -301,7 +351,7 @@ function App() {
   if (!response) return null;
 
   const { final_itinerary, constraints, review_summary } = response;
-  const { budget_rollup, neighborhoods, days, logistics_summary, strategic_insight, budget_analysis, cost_optimization_tips, logistics_output } = final_itinerary as any;
+  const { budget_rollup, neighborhoods, days, strategic_insight, budget_analysis, cost_optimization_tips } = final_itinerary;
 
   // ── helpers ──────────────────────────────────────────────────────────────
   const getCurrencySymbol = (currency: string): string => {
@@ -347,7 +397,7 @@ function App() {
   })();
 
   // Merge duplicate categories (e.g., "stay" per city → one total)
-  const groupedBudget = (budget_rollup?.categories ?? []).reduce<Record<string, number>>((acc, cat: any) => {
+  const groupedBudget = ((budget_rollup?.categories ?? []) as Array<{category: string; estimated_total: number}>).reduce<Record<string, number>>((acc, cat) => {
     acc[cat.category] = (acc[cat.category] ?? 0) + cat.estimated_total;
     return acc;
   }, {});
@@ -365,14 +415,14 @@ function App() {
         <div className="header-content">
           <div className="logo" style={{ color: '#1a1a1a' }}>
             <GlobeIcon />
-            <span>GlobeTrek</span>
+            <span>GlobeAI</span>
           </div>
           <nav className="nav-links">
             <a href="#" className="nav-link" style={{ color: '#1a1a1a' }} onClick={() => setView('home')}>Explore</a>
             <a href="#" className="nav-link active" style={{ color: '#1a1a1a', borderBottomColor: '#1a1a1a' }}>Itineraries</a>
-            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }}>Destinations</a>
-            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }}>Passes</a>
-            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }}>Community</a>
+            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }} onClick={(e) => { e.preventDefault(); alert('Destinations explorer coming soon!'); }}>Destinations</a>
+            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }} onClick={(e) => { e.preventDefault(); alert('Travel passes coming soon!'); }}>Passes</a>
+            <a href="#" className="nav-link" style={{ color: '#1a1a1a' }} onClick={(e) => { e.preventDefault(); alert('Travel community coming soon!'); }}>Community</a>
           </nav>
           <div className="header-actions">
             <button className="icon-button" style={{ color: '#1a1a1a' }}>
@@ -486,9 +536,9 @@ function App() {
                     Budget Breakdown
                   </span>
                 </h3>
-                <div className="budget-status">
-                  <CheckIcon />
-                  <span>Within Budget</span>
+                <div className="budget-status" style={{ color: budget_rollup?.within_budget ? '#16a34a' : '#dc2626' }}>
+                  {budget_rollup?.within_budget ? <CheckIcon /> : <span>⚠️</span>}
+                  <span>{budget_rollup?.within_budget ? 'Within Budget' : 'Over Budget'}</span>
                 </div>
               </div>
               
@@ -515,7 +565,7 @@ function App() {
             <div className="content-card">
               <h3 className="card-title">Daily Schedule</h3>
               <div className="schedule-section">
-                {days.map((day) => (
+                {(days as any[]).map((day: any) => (
                   <div key={day.day_number} className="day-card">
                     <div className="day-timeline">
                       <div className="day-timeline-dot" />
@@ -528,7 +578,7 @@ function App() {
                       )}
                     </div>
                     <div className="activities-grid">
-                      {day.items.map((item, i) => (
+                      {((day as any).items as any[]).map((item: any, i: number) => (
                         <div key={i} className="activity-card">
                           <div className="activity-time">{item.time}</div>
                           <div className="activity-title">{item.activity_name}</div>
@@ -611,7 +661,12 @@ function App() {
               
               <div className="validated-by">Validated by 4 AI agents</div>
               
-              <button className="book-button">
+              <button
+                className="book-button"
+                style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                title="Booking integration coming soon"
+                disabled
+              >
                 Book This Itinerary <ArrowRightIcon />
               </button>
               
@@ -653,7 +708,7 @@ function App() {
               <div className="footer-brand">
                 <div className="footer-logo">
                   <GlobeIcon />
-                  <span>GlobeTrek</span>
+                  <span>GlobeAI</span>
                 </div>
                 <span className="footer-tagline">AI-powered travel planning</span>
               </div>
@@ -675,9 +730,9 @@ function App() {
             <div className="footer-bottom">
               <div className="footer-logo">
                 <GlobeIcon />
-                <span>GlobeTrek</span>
+                <span>GlobeAI</span>
               </div>
-              <p>© 2024 GlobeTrek Exploration. All rights reserved.</p>
+              <p>© 2024 GlobeAI Travel. All rights reserved.</p>
             </div>
           </div>
         </footer>

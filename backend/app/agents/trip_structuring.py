@@ -145,6 +145,43 @@ MULTI_CITY_ROUTES = {
                    highlights=["Alcazar", "Alhambra", "Flamenco", "Tapas"]),
         ]
     },
+    "thailand": {
+        "route": ["Bangkok", "Chiang Mai", "Chiang Rai", "Krabi", "Phuket"],
+        "regions": [
+            Region(name="Bangkok", base_location="Bangkok", days=3,
+                   highlights=["Grand Palace", "Wat Pho", "Chatuchak Market", "Chinatown", "Khao San Road"]),
+            Region(name="Chiang Mai & North", base_location="Chiang Mai", days=3,
+                   highlights=["Doi Suthep Temple", "Old City Temples", "Night Bazaar", "Elephant Sanctuary", "Doi Inthanon"]),
+            Region(name="Chiang Rai", base_location="Chiang Rai", days=2,
+                   highlights=["White Temple", "Blue Temple", "Black House", "Golden Triangle"]),
+            Region(name="Southern Islands", base_location="Krabi", days=3,
+                   highlights=["Railay Beach", "Phi Phi Islands", "Tiger Cave Temple", "Ao Nang", "Four Islands Tour"]),
+        ]
+    },
+    "vietnam": {
+        "route": ["Hanoi", "Ha Long Bay", "Hue", "Hoi An", "Ho Chi Minh City"],
+        "regions": [
+            Region(name="Hanoi & Ha Long Bay", base_location="Hanoi", days=3,
+                   highlights=["Old Quarter", "Ho Chi Minh Mausoleum", "Ha Long Bay cruise", "Temple of Literature"]),
+            Region(name="Central Vietnam", base_location="Hoi An", days=3,
+                   highlights=["Hoi An Ancient Town", "My Son Sanctuary", "Hue Imperial City", "Marble Mountains"]),
+            Region(name="Ho Chi Minh City", base_location="Ho Chi Minh City", days=2,
+                   highlights=["Cu Chi Tunnels", "War Remnants Museum", "Ben Thanh Market", "Mekong Delta"]),
+        ]
+    },
+    "india": {
+        "route": ["Delhi", "Agra", "Jaipur", "Udaipur", "Goa"],
+        "regions": [
+            Region(name="Delhi", base_location="Delhi", days=2,
+                   highlights=["Red Fort", "Qutub Minar", "Chandni Chowk", "India Gate"]),
+            Region(name="Agra", base_location="Agra", days=2,
+                   highlights=["Taj Mahal", "Agra Fort", "Fatehpur Sikri"]),
+            Region(name="Rajasthan", base_location="Jaipur", days=3,
+                   highlights=["Amber Fort", "Hawa Mahal", "City Palace", "Udaipur Lake Palace"]),
+            Region(name="Goa", base_location="Goa", days=3,
+                   highlights=["Beaches", "Old Goa Churches", "Spice Plantations", "Dudhsagar Falls"]),
+        ]
+    },
 }
 
 
