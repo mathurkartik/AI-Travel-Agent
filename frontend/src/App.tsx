@@ -365,7 +365,7 @@ function App() {
                 <GlobeIcon />
                 <span>GlobeAI</span>
               </div>
-              <p>© 2024 GlobeAI Travel. All rights reserved.</p>
+              <p>© 2026 GlobeAI Travel. All rights reserved.</p>
             </div>
           </div>
         </footer>
@@ -767,7 +767,7 @@ function App() {
                 <GlobeIcon />
                 <span>GlobeAI</span>
               </div>
-              <p>© 2024 GlobeAI Travel. All rights reserved.</p>
+              <p>© 2026 GlobeAI Travel. All rights reserved.</p>
             </div>
           </div>
         </footer>
