@@ -18,7 +18,6 @@ from ..models import (
     BudgetCategory,
     ReviewStatus,
     ActivityType,
-    JAPAN_5D_TOKYO_KYOTO_3000_CONSTRAINTS,
 )
 
 from pydantic import BaseModel
