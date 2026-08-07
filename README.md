@@ -2,6 +2,8 @@
 
 > A multi-agent AI system that transforms natural-language travel requests into structured, day-by-day trip itineraries — powered by specialized AI agents working in parallel.
 
+🔗 **Live Links:** [Web Application (Vercel)](https://ai-travel-agent-bice.vercel.app/) | [API Server Health Check (Render)](https://ai-travel-agent-4xo7.onrender.com/health)
+
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.109-009688?style=flat-square&logo=fastapi&logoColor=white)
 ![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)
@@ -207,10 +209,10 @@ pytest tests/test_edge_cases.py   # Edge case handling
 
 ### Option 1: PaaS (Recommended)
 
-| Component | Platform | Root Directory |
-|-----------|----------|----------------|
-| Backend   | [Render](https://render.com) or [Railway](https://railway.app) | `backend` |
-| Frontend  | [Vercel](https://vercel.com) or [Netlify](https://netlify.com) | `frontend` |
+| Component | Platform | Live URL | Root Directory |
+|-----------|----------|----------|----------------|
+| Backend   | [Render](https://render.com) | [API (Render)](https://ai-travel-agent-4xo7.onrender.com) | `backend` |
+| Frontend  | [Vercel](https://vercel.com) | [Web App (Vercel)](https://ai-travel-agent-bice.vercel.app/) | `frontend` |
 
 ### Option 2: Docker
 
