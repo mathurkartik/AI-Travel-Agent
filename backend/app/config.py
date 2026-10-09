@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     
     # Groq Configuration (Default)
     groq_api_key: str | None = None
-    groq_model: str = "llama-3.3-70b-versatile"  # Updated model (mixtral-8x7b-32768 was decommissioned)
-    groq_max_tokens_per_request: int = 4000
+    groq_model: str = "qwen/qwen3.8-27b"
+    groq_max_tokens_per_request: int = 900
     groq_temperature: float = 0.1  # Low for structured extraction
     
     # OpenAI (Fallback)
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     token_buffer_percent: int = 20  # Keep 20% buffer for daily limit
     
     # Agents
-    agent_timeout_seconds: int = 30
+    agent_timeout_seconds: int = 120
     max_review_retries: int = 3
     
     # Caching to reduce token usage

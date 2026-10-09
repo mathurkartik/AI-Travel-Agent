@@ -51,6 +51,11 @@ from .schemas import (
     JAPAN_5D_TOKYO_KYOTO_3000_CONSTRAINTS,
 )
 
+from .exceptions import (
+    MissingConstraintError,
+    InvalidConstraintError,
+)
+
 __all__ = [
     "TravelConstraints",
     "Region",
@@ -82,5 +87,8 @@ __all__ = [
     "PlanRequest",
     "PlanResponse",
     "HealthResponse",
+    "MissingConstraintError",
+    "InvalidConstraintError",
     "JAPAN_5D_TOKYO_KYOTO_3000_CONSTRAINTS",
 ]
+

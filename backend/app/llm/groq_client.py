@@ -3,6 +3,7 @@ Groq LLM Client with token tracking and structured output support.
 Optimized for 100k tokens/day limit.
 """
 
+import asyncio
 import json
 import time
 from typing import Optional, Any, Dict, Type, TypeVar
@@ -36,7 +37,7 @@ class GroqClient:
         self,
         api_key: Optional[str] = None,
         model: Optional[str] = None,
-        max_tokens: int = 4000,
+        max_tokens: int = 900,
         temperature: float = 0.1,
         enable_tracking: bool = True,
         enable_cache: bool = True,
@@ -143,11 +144,12 @@ class GroqClient:
 
 Respond with valid JSON matching this schema:
 {
-  "destination_region": "Country or region name",
+  "destination_region": "Country or region name, or null if not mentioned",
   "cities": ["Stop1", "Stop2", ...],
-  "duration_days": number,
-  "budget_total": number,
-  "currency": "3-letter code like INR, USD, EUR (default to INR)",
+  "duration_days": number or null,
+  "budget_total": number or null,
+  "budget_tier": "budget, moderate, luxury, or null",
+  "currency": "3-letter code like INR, USD, EUR (default to USD or INR)",
   "preferences": ["what they want to experience"],
   "avoidances": ["what they want to avoid"],
   "hard_requirements": ["must-haves inferred from request"],
@@ -155,28 +157,31 @@ Respond with valid JSON matching this schema:
   "is_road_trip": boolean
 }
 
-CRITICAL RULES:
-- Extract the destination EXACTLY as the user mentions it
-- "cities" means route stops OR cities depending on trip type. Generate enough to cover the full trip.
+CRITICAL EXTRACTION RULES (STRICT - DO NOT INVENT MISSING DATA):
+- Destination: Extract the primary destination/country/city. If user does NOT state where they want to go, set destination_region to null and cities to [].
+- Duration: Extract duration in days (e.g. 1 week = 7 days). If user does NOT mention duration or days, set duration_days to null.
+- Budget:
+  * If a numeric budget is stated ($2000, 50000 INR, etc.), extract the number into budget_total and the 3-letter currency into currency.
+  * If user specifies a budget style without an exact number (e.g., "cheap", "backpacking", "budget trip" -> "budget"; "moderate", "mid-range", "reasonable" -> "moderate"; "luxury", "5-star", "lavish" -> "luxury"), set budget_tier to "budget", "moderate", or "luxury".
+  * If neither amount nor tier is mentioned, set budget_total to null and budget_tier to null.
+  * DO NOT guess or invent default budget or duration values if omitted.
 
 TRIP TYPE DETECTION:
 - ROAD TRIP countries (Iceland, Norway, New Zealand, Scotland, Ireland, Portugal coast, South Africa Garden Route, Australia outback):
   Set is_road_trip=true. Generate 4-8 ROUTE STOPS (regions/towns along the route), NOT just the capital.
-  Example Iceland 15 days: cities=["Reykjavik","Vik","Hofn","Egilsstadir","Akureyri","Snaefellsnes"] (Ring Road stops)
-  Example Norway 10 days: cities=["Oslo","Bergen","Geiranger","Alesund","Tromso"]
-  Example New Zealand 14 days: cities=["Auckland","Rotorua","Wellington","Queenstown","Milford Sound"]
+  Example Iceland: cities=["Reykjavik","Vik","Hofn","Egilsstadir","Akureyri","Snaefellsnes"]
+  Example Norway: cities=["Oslo","Bergen","Geiranger","Alesund","Tromso"]
+  Example New Zealand: cities=["Auckland","Rotorua","Wellington","Queenstown","Milford Sound"]
 
 - CITY TRIP destinations (Paris, Tokyo, NYC, Dubai, Singapore):
   Set is_road_trip=false. Use 1-3 cities as appropriate.
 
 - MULTI-CITY countries (Japan, Italy, Spain):
-  Set is_road_trip=false. Generate 2-4 key cities based on duration.
-  Example Japan 7 days: cities=["Tokyo","Kyoto","Osaka"]
+  Set is_road_trip=false. Generate 2-4 key cities.
+  Example Japan: cities=["Tokyo","Kyoto","Osaka"]
 
-- Duration: count nights + 1 if not specified
-- Budget: default to 50000 INR if not mentioned
-- Preferences: include nature, adventure, scenic drives, glaciers, waterfalls etc. based on destination character
-- For road trips: add "self-drive", "scenic routes", "nature" to preferences automatically
+- Preferences: include nature, adventure, scenic drives, temples, food etc. based on request.
+- For road trips: add "self-drive", "scenic routes", "nature" to preferences automatically.
 """
 
         try:
@@ -205,6 +210,8 @@ TRIP TYPE DETECTION:
             
             return constraints
             
+        except TokenBudgetExceeded:
+            raise
         except Exception as e:
             # Log error with context
             raise RuntimeError(f"Failed to extract constraints: {str(e)}")
@@ -279,6 +286,41 @@ TRIP TYPE DETECTION:
         except Exception as e:
             raise RuntimeError(f"Generation failed: {str(e)}")
     
+    async def chat_with_retry(
+        self,
+        messages: list,
+        max_tokens: int = 900,
+        temperature: Optional[float] = None,
+        response_format: Optional[dict] = None,
+        max_retries: int = 3,
+    ) -> str:
+        """Chat completion with automatic retry on 429 rate limit errors."""
+        if not self._client:
+            raise RuntimeError("Groq client not initialized")
+        max_tokens = min(max_tokens, 900)
+        for attempt in range(max_retries):
+            try:
+                kwargs = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": temperature or self.temperature,
+                    "max_tokens": max_tokens,
+                }
+                if response_format:
+                    kwargs["response_format"] = response_format
+                response = self._client.chat.completions.create(**kwargs)
+                if response.usage:
+                    self._record_usage(response.usage.prompt_tokens, response.usage.completion_tokens)
+                return response.choices[0].message.content
+            except Exception as e:
+                if "429" in str(e) or "rate_limit" in str(e):
+                    wait = 15 * (attempt + 1)
+                    print(f"Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries})")
+                    await asyncio.sleep(wait)
+                    continue
+                raise
+        raise RuntimeError("Max retries exceeded for rate limit")
+
     def get_token_summary(self) -> Dict[str, Any]:
         """Get current token usage summary."""
         if self._tracker:

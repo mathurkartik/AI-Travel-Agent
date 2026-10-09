@@ -61,10 +61,11 @@ class TravelConstraints(BaseModel):
     Extracted from natural language request by Orchestrator.
     Shared read-only input to all worker agents.
     """
-    destination_region: str = Field(..., min_length=1, max_length=100, description="Primary region/country")
-    cities: List[str] = Field(..., min_length=1, max_length=10, description="Target cities to visit")
-    duration_days: int = Field(..., ge=1, le=90, description="Trip duration in days")
-    budget_total: float = Field(..., gt=0, le=100000000, description="Total budget in specified currency (supports INR and large amounts)")
+    destination_region: Optional[str] = Field(default=None, max_length=100, description="Primary region/country")
+    cities: List[str] = Field(default_factory=list, max_length=10, description="Target cities to visit")
+    duration_days: Optional[int] = Field(default=None, ge=1, le=90, description="Trip duration in days")
+    budget_total: Optional[float] = Field(default=None, ge=0, le=100000000, description="Total budget in specified currency (supports INR and large amounts)")
+    budget_tier: Optional[str] = Field(default=None, description="Budget style/tier: 'budget', 'moderate', 'luxury'")
     currency: str = Field(default="INR", min_length=3, max_length=3, description="Currency code (ISO 4217)")
     preferences: List[str] = Field(default_factory=list, description="What the user wants (e.g., 'food', 'temples')")
     avoidances: List[str] = Field(default_factory=list, description="What the user wants to avoid (e.g., 'crowds')")
@@ -77,11 +78,12 @@ class TravelConstraints(BaseModel):
     
     @field_validator("destination_region")
     @classmethod
-    def validate_destination_not_empty(cls, v: str) -> str:
-        """Ensure destination is not just whitespace."""
-        if v is None or not v or not v.strip():
-            raise ValueError("Destination region cannot be empty or whitespace")
-        return v.strip()
+    def validate_destination_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        """Ensure destination is not just whitespace if provided."""
+        if v is None:
+            return None
+        cleaned = v.strip()
+        return cleaned if cleaned else None
     
     @field_validator("cities")
     @classmethod
@@ -103,9 +105,9 @@ class TravelConstraints(BaseModel):
     
     @field_validator("budget_total")
     @classmethod
-    def validate_budget_reasonable(cls, v: float) -> float:
+    def validate_budget_reasonable(cls, v: Optional[float]) -> Optional[float]:
         """Warn about potentially unreasonable budgets (but allow)."""
-        if v > 100000:
+        if v is not None and v > 100000:
             # Still valid but could be a typo - logged at usage level
             pass
         return v

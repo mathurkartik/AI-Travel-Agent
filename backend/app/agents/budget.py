@@ -1,9 +1,11 @@
 """
 Budget Agent - Phase 4c.
 Ensures plan stays within budget constraints.
+Uses LLM for city-specific cost estimation instead of static price bands.
 """
 
-from typing import List, Optional
+import json
+from typing import List, Optional, Dict
 
 from ..models import (
     TravelConstraints,
@@ -18,86 +20,150 @@ from ..models import (
 class BudgetAgent:
     """
     Analyzes costs and ensures budget compliance.
-    
-    Inputs: TravelConstraints + static price bands + FX rates
-    Output: BudgetBreakdown with flags and suggested swaps
-    
-    Responsibilities:
-    - Break budget into categories (stay, transport, food, activities)
-    - Flag when plan exceeds budget
-    - Suggest cheaper alternatives
+    Uses LLM knowledge for city-specific pricing estimates.
     """
-    
+
     def __init__(self, tool_router=None, llm_client=None):
         self.tool_router = tool_router
         self.llm_client = llm_client
-        # Static price bands until real APIs are available
-        self.price_bands = self._load_static_price_bands()
-    
+
     async def analyze(self, constraints: TravelConstraints) -> BudgetBreakdown:
-        """
-        Phase 4c: Generate budget breakdown from constraints.
-        
-        Uses ToolRouter.price_band and ToolRouter.fx_convert to estimate
-        costs and check against budget constraints.
-        
-        **Phase 4c**: Uses static ToolRouter data (no LLM calls).
-        **Phase 8**: Could add LLM for intelligent swap suggestions.
-        
-        Args:
-            constraints: TravelConstraints with cities, duration, budget
-            
-        Returns:
-            BudgetBreakdown with categories, violations, and suggested swaps
-        """
+        """Generate budget breakdown from constraints."""
+        if self.llm_client:
+            try:
+                return await self._llm_analyze(constraints)
+            except Exception as e:
+                print(f"LLM budget analysis failed: {e}")
+
+        return await self._fallback_analyze(constraints)
+
+    async def _llm_analyze(self, constraints: TravelConstraints) -> BudgetBreakdown:
+        """Use LLM to generate city-specific budget estimates."""
+        system_prompt = f"""You are a travel budget expert. Estimate realistic costs for a trip.
+
+Respond with valid JSON:
+{{
+  "categories": [
+    {{
+      "category": "stay|food|transport|activities",
+      "city": "city name",
+      "estimated_total": number in {constraints.currency},
+      "notes": "brief explanation"
+    }}
+  ],
+  "grand_total": number in {constraints.currency},
+  "within_budget": boolean,
+  "swap_suggestions": [
+    {{
+      "original_item": "what to change",
+      "suggested_alternative": "cheaper option",
+      "savings_estimate": number in {constraints.currency},
+      "rationale": "why this works"
+    }}
+  ]
+}}
+
+Rules:
+- All amounts in {constraints.currency}
+- For each city, provide stay, food, transport, and activities categories
+- Use realistic local prices for {constraints.currency}
+- If over budget, suggest specific swaps
+- Be specific in notes (mention real hotel tiers, food types, transport modes)"""
+
+        user_prompt = f"""Estimate costs for:
+- Destination: {constraints.destination_region}
+- Cities: {', '.join(constraints.cities)}
+- Duration: {constraints.duration_days} days
+- Budget: {constraints.budget_total} {constraints.currency}
+- Preferences: {', '.join(constraints.preferences) if constraints.preferences else 'general'}"""
+
+        content = await self.llm_client.chat_with_retry(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=900,
+            response_format={"type": "json_object"}
+        )
+
+        data = json.loads(content)
+
         categories = []
-        violations = []
-        suggested_swaps = []
-        total_cost = 0.0
-        
-        # Determine price band based on budget level
-        price_band = await self._determine_price_band(constraints)
-        
-        # Estimate costs for each category
-        for city in constraints.cities:
-            # Get price data from ToolRouter
-            stay_cost = await self._estimate_stay_cost(city, constraints, price_band)
-            food_cost = await self._estimate_food_cost(city, constraints, price_band)
-            transport_cost = await self._estimate_transport_cost(city, constraints)
-            activity_cost = await self._estimate_activity_cost(city, constraints, price_band)
-            
-            # Add to categories
-            categories.extend([
-                stay_cost,
-                food_cost,
-                transport_cost,
-                activity_cost
-            ])
-            
-            total_cost += sum([
-                stay_cost.estimated_total,
-                food_cost.estimated_total,
-                transport_cost.estimated_total,
-                activity_cost.estimated_total
-            ])
-        
-        # Check if over budget
-        within_budget = total_cost <= constraints.budget_total
-        
-        if not within_budget:
-            over_by = total_cost - constraints.budget_total
-            violations.append(BudgetViolation(
-                category="total",
-                estimated=total_cost,
-                limit=constraints.budget_total,
-                over_by=over_by
+        for cat in data.get("categories", []):
+            categories.append(BudgetCategory(
+                category=cat["category"],
+                estimated_total=round(float(cat["estimated_total"]), 2),
+                currency=constraints.currency,
+                notes=cat.get("notes", "")
             ))
-            
-            # Generate swap suggestions
-            suggested_swaps = self._generate_swap_suggestions(
-                categories, over_by, constraints, price_band
-            )
-        
+
+        grand_total = float(data.get("grand_total", sum(c.estimated_total for c in categories)))
+        within_budget = grand_total <= constraints.budget_total
+
+        violations = []
+        if not within_budget:
+            over_by = grand_total - constraints.budget_total
+            violations.append(BudgetViolation(
+                category="total", estimated=grand_total,
+                limit=constraints.budget_total, over_by=over_by
+            ))
+
+        suggested_swaps = []
+        for swap in data.get("swap_suggestions", []):
+            suggested_swaps.append(SuggestedSwap(
+                original_item=swap.get("original_item", ""),
+                suggested_alternative=swap.get("suggested_alternative", ""),
+                savings_estimate=round(float(swap.get("savings_estimate", 0)), 2),
+                rationale=swap.get("rationale", "")
+            ))
+
+        return BudgetBreakdown(
+            categories=categories,
+            grand_total=round(grand_total, 2),
+            currency=constraints.currency,
+            within_budget=within_budget,
+            remaining_buffer=round(max(0, constraints.budget_total - grand_total), 2),
+            violations=violations,
+            suggested_swaps=suggested_swaps
+        )
+
+    async def _fallback_analyze(self, constraints: TravelConstraints) -> BudgetBreakdown:
+        """Simple fallback when LLM is unavailable."""
+        categories = []
+        total_cost = 0.0
+
+        daily_budget = constraints.budget_total / max(1, constraints.duration_days)
+        stay_pct, food_pct, transport_pct, activity_pct = 0.35, 0.25, 0.20, 0.20
+
+        for city in constraints.cities:
+            days = max(1, constraints.duration_days // len(constraints.cities))
+            city_budget = daily_budget * days
+
+            stay_cost = round(city_budget * stay_pct, 2)
+            food_cost = round(city_budget * food_pct, 2)
+            transport_cost = round(city_budget * transport_pct, 2)
+            activity_cost = round(city_budget * activity_pct, 2)
+
+            categories.extend([
+                BudgetCategory(category="stay", estimated_total=stay_cost,
+                               currency=constraints.currency, notes=f"{days} nights in {city}"),
+                BudgetCategory(category="food", estimated_total=food_cost,
+                               currency=constraints.currency, notes=f"{days} days of meals in {city}"),
+                BudgetCategory(category="transport", estimated_total=transport_cost,
+                               currency=constraints.currency, notes=f"Local + inter-city transport from {city}"),
+                BudgetCategory(category="activities", estimated_total=activity_cost,
+                               currency=constraints.currency, notes=f"Activities and attractions in {city}"),
+            ])
+            total_cost += stay_cost + food_cost + transport_cost + activity_cost
+
+        within_budget = total_cost <= constraints.budget_total
+        violations = []
+        if not within_budget:
+            violations.append(BudgetViolation(
+                category="total", estimated=total_cost,
+                limit=constraints.budget_total, over_by=total_cost - constraints.budget_total
+            ))
+
         return BudgetBreakdown(
             categories=categories,
             grand_total=round(total_cost, 2),
@@ -105,288 +171,5 @@ class BudgetAgent:
             within_budget=within_budget,
             remaining_buffer=round(max(0, constraints.budget_total - total_cost), 2),
             violations=violations,
-            suggested_swaps=suggested_swaps
+            suggested_swaps=[]
         )
-    
-    async def _determine_price_band(self, constraints: TravelConstraints) -> str:
-        """Determine appropriate price band based on budget level."""
-        # Simple heuristic: budget per day
-        if constraints.duration_days == 0:
-            return "moderate"
-        
-        daily_budget_target = constraints.budget_total / constraints.duration_days
-        
-        # Convert daily budget from target currency to USD for band determination
-        if constraints.currency.upper() == "USD":
-            daily_budget_usd = daily_budget_target
-        else:
-            if self.tool_router:
-                try:
-                    result = await self.tool_router.fx_convert(
-                        amount=daily_budget_target,
-                        from_currency=constraints.currency,
-                        to_currency="USD"
-                    )
-                    daily_budget_usd = result.get("converted_amount", daily_budget_target / 83.0)
-                except Exception:
-                    daily_budget_usd = daily_budget_target / 83.0
-            else:
-                daily_budget_usd = daily_budget_target / 83.0
-        
-        if daily_budget_usd < 100:
-            return "budget"
-        elif daily_budget_usd < 200:
-            return "moderate"
-        elif daily_budget_usd < 400:
-            return "expensive"
-        else:
-            return "luxury"
-    
-    async def _estimate_stay_cost(
-        self,
-        city: str,
-        constraints: TravelConstraints,
-        price_band: str
-    ) -> any:  # BudgetCategory
-        """Estimate accommodation cost for a city."""
-        from ..models import BudgetCategory
-        
-        # Estimate nights in this city
-        nights = max(1, constraints.duration_days // len(constraints.cities))
-        
-        # Get price from ToolRouter
-        if self.tool_router:
-            try:
-                price_result = await self.tool_router.price_band(
-                    category="hotel",
-                    city=city,
-                    band=price_band
-                )
-                cost_per_night = price_result.get("estimate_usd", 100)
-            except Exception:
-                cost_per_night = 100  # Fallback
-        else:
-            cost_per_night = self.price_bands.get("japan", {}).get("stay", {}).get(price_band, 100)
-        
-        total_cost_usd = cost_per_night * nights
-        total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
-        
-        return BudgetCategory(
-            category="stay",
-            estimated_total=round(total_cost, 2),
-            currency=constraints.currency,
-            notes=f"{nights} nights in {city} ({price_band} accommodation). Estimated at {round(total_cost/nights, 2)} {constraints.currency} per night."
-        )
-    
-    async def _estimate_food_cost(
-        self,
-        city: str,
-        constraints: TravelConstraints,
-        price_band: str
-    ) -> any:  # BudgetCategory
-        """Estimate food/dining cost for a city."""
-        from ..models import BudgetCategory
-        
-        # Estimate days in this city
-        days = max(1, constraints.duration_days // len(constraints.cities))
-        
-        # Get price from ToolRouter
-        if self.tool_router:
-            try:
-                price_result = await self.tool_router.price_band(
-                    category="food",
-                    city=city,
-                    band=price_band
-                )
-                cost_per_day = price_result.get("estimate_usd", 40)
-            except Exception:
-                cost_per_day = 40  # Fallback
-        else:
-            cost_per_day = self.price_bands.get("japan", {}).get("food", {}).get(price_band, 40)
-        
-        total_cost_usd = cost_per_day * days
-        total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
-        
-        return BudgetCategory(
-            category="food",
-            estimated_total=round(total_cost, 2),
-            currency=constraints.currency,
-            notes=f"{days} days of meals in {city} ({price_band} dining)"
-        )
-    
-    async def _estimate_transport_cost(
-        self,
-        city: str,
-        constraints: TravelConstraints
-    ) -> any:  # BudgetCategory
-        """Estimate transport cost for a city."""
-        from ..models import BudgetCategory
-        
-        # Check if this city involves inter-city travel
-        city_idx = constraints.cities.index(city) if city in constraints.cities else -1
-        transport_cost = 0
-        
-        if city_idx > 0 and self.tool_router:
-            # Get inter-city transport cost
-            try:
-                prev_city = constraints.cities[city_idx - 1]
-                geo_result = await self.tool_router.geo_estimate(
-                    from_location=prev_city,
-                    to_location=city
-                )
-                transport_cost = geo_result.get("estimated_cost_usd", 50)
-            except Exception:
-                transport_cost = 50
-        
-        # Add local transport estimate
-        days = max(1, constraints.duration_days // len(constraints.cities))
-        local_transport = 10 * days  # ~$10 per day for local transport
-        total_cost_usd = transport_cost + local_transport
-    
-        if constraints.is_road_trip:
-            # For road trips, transport includes car rental + fuel
-            # Divide total car cost across cities for the breakdown
-            car_rental_daily_usd = 100 if "iceland" in constraints.destination_region.lower() else 70
-            fuel_daily_usd = 30
-            total_car_usd = (car_rental_daily_usd + fuel_daily_usd) * (constraints.duration_days / len(constraints.cities))
-            total_cost_usd += total_car_usd
-            notes = f"SUV Rental + Fuel + Local parking in/around {city}"
-        else:
-            notes = f"Inter-city transit + local transport in {city}"
-
-        total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
-        
-        return BudgetCategory(
-            category="transport",
-            estimated_total=round(total_cost, 2),
-            currency=constraints.currency,
-            notes=notes
-        )
-    
-    async def _estimate_activity_cost(
-        self,
-        city: str,
-        constraints: TravelConstraints,
-        price_band: str
-    ) -> any:  # BudgetCategory
-        """Estimate activity/attraction cost for a city."""
-        from ..models import BudgetCategory
-        
-        # Estimate activities per day
-        days = max(1, constraints.duration_days // len(constraints.cities))
-        
-        # Get price from ToolRouter
-        if self.tool_router:
-            try:
-                price_result = await self.tool_router.price_band(
-                    category="activity",
-                    city=city,
-                    band=price_band
-                )
-                cost_per_day = price_result.get("estimate_usd", 20)
-            except Exception:
-                cost_per_day = 20  # Fallback
-        else:
-            cost_per_day = self.price_bands.get("japan", {}).get("activities", {}).get(price_band, 20)
-        
-        total_cost_usd = cost_per_day * days
-        total_cost = await self._convert_to_target(total_cost_usd, constraints.currency)
-        
-        return BudgetCategory(
-            category="activities",
-            estimated_total=round(total_cost, 2),
-            currency=constraints.currency,
-            notes=f"Activities and attractions in {city} ({price_band})"
-        )
-    
-    async def _convert_to_target(self, amount_usd: float, target_currency: str) -> float:
-        """Convert USD amount to target currency."""
-        if target_currency.upper() == "USD":
-            return amount_usd
-        
-        if self.tool_router:
-            try:
-                result = await self.tool_router.fx_convert(
-                    amount=amount_usd,
-                    from_currency="USD",
-                    to_currency=target_currency
-                )
-                return result.get("converted_amount", amount_usd * 83.0)
-            except Exception:
-                pass
-        
-        fallbacks = {"INR": 83.0, "EUR": 0.92, "JPY": 150.0}
-        return amount_usd * fallbacks.get(target_currency.upper(), 1.0)
-
-    def _generate_swap_suggestions(
-        self,
-        categories: List[any],
-        over_by: float,
-        constraints: TravelConstraints,
-        current_band: str
-    ) -> List[any]:  # List[SuggestedSwap]
-        """Generate suggestions to reduce budget."""
-        from ..models import SuggestedSwap
-        
-        swaps = []
-        
-        # Suggest downgrading hotel
-        hotel_cat = next((c for c in categories if c.category == "stay"), None)
-        if hotel_cat and current_band in ["expensive", "luxury"]:
-            potential_savings = hotel_cat.estimated_total * 0.3
-            swaps.append(SuggestedSwap(
-                original_item=f"{current_band} hotel",
-                suggested_alternative="Moderate 3-star hotel or Airbnb",
-                savings_estimate=round(potential_savings, 2),
-                rationale="Comfortable but less luxurious"
-            ))
-        
-        # Suggest reducing dining costs
-        food_cat = next((c for c in categories if c.category == "food"), None)
-        if food_cat and current_band in ["expensive", "luxury"]:
-            potential_savings = food_cat.estimated_total * 0.4
-            swaps.append(SuggestedSwap(
-                original_item=f"{current_band} dining",
-                suggested_alternative="Mix of casual restaurants and convenience stores",
-                savings_estimate=round(potential_savings, 2),
-                rationale="Still good food, less fancy settings"
-            ))
-        
-        # Suggest cutting expensive activities
-        activity_cat = next((c for c in categories if c.category == "activities"), None)
-        if activity_cat and activity_cat.estimated_total > 0:
-            potential_savings = activity_cat.estimated_total * 0.5
-            swaps.append(SuggestedSwap(
-                original_item="Paid attractions and tours",
-                suggested_alternative="Focus on free temples, parks, and walking tours",
-                savings_estimate=round(potential_savings, 2),
-                rationale="More self-guided exploration, fewer organized tours"
-            ))
-        
-        # If still way over budget, suggest fewer cities
-        if over_by > constraints.budget_total * 0.5 and len(constraints.cities) > 1:
-            swaps.append(SuggestedSwap(
-                original_item=f"Visit {len(constraints.cities)} cities",
-                suggested_alternative=f"Focus on {len(constraints.cities) - 1} cities to reduce transport costs",
-                savings_estimate=round(over_by * 0.6, 2),
-                rationale="Less travel time, more depth in fewer locations"
-            ))
-        
-        return swaps
-    
-    def _load_static_price_bands(self) -> dict:
-        """Load illustrative price bands for common destinations (fallback)."""
-        return {
-            "japan": {
-                "stay": {"budget": 50, "moderate": 120, "expensive": 250, "luxury": 500},
-                "food": {"budget": 20, "moderate": 50, "expensive": 100, "luxury": 200},
-                "transport": {"local": 10, "intercity": 100},
-                "activities": {"budget": 0, "moderate": 20, "expensive": 50, "luxury": 100}
-            },
-            "europe": {
-                "stay": {"budget": 60, "moderate": 150, "expensive": 300, "luxury": 600},
-                "food": {"budget": 25, "moderate": 60, "expensive": 120, "luxury": 250},
-                "transport": {"local": 15, "intercity": 80},
-                "activities": {"budget": 0, "moderate": 25, "expensive": 60, "luxury": 150}
-            }
-        }

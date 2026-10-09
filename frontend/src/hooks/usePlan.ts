@@ -10,6 +10,8 @@ interface UsePlanState {
   loading: boolean;
   error: string | null;
   traceId: string | null;
+  missingFields: string[];
+  suggestedTiers: Array<{ tier: string; label: string }>;
 }
 
 interface UsePlanReturn extends UsePlanState {
@@ -23,6 +25,8 @@ export function usePlan(): UsePlanReturn {
     loading: false,
     error: null,
     traceId: null,
+    missingFields: [],
+    suggestedTiers: [],
   });
 
   const submitPlan = useCallback(async (request: string): Promise<PlanResponse | null> => {
@@ -31,7 +35,7 @@ export function usePlan(): UsePlanReturn {
       return null;
     }
 
-    setState({ loading: true, error: null, traceId: null });
+    setState({ loading: true, error: null, traceId: null, missingFields: [], suggestedTiers: [] });
 
     try {
       const response = await createPlan({ request });
@@ -39,6 +43,8 @@ export function usePlan(): UsePlanReturn {
         loading: false,
         error: null,
         traceId: response.trace_id,
+        missingFields: [],
+        suggestedTiers: [],
       });
       return response;
     } catch (err) {
@@ -47,11 +53,15 @@ export function usePlan(): UsePlanReturn {
         : 'An unexpected error occurred';
       
       const traceId = err instanceof ApiError ? (err.traceId ?? null) : null;
+      const missingFields = err instanceof ApiError ? err.missingFields : [];
+      const suggestedTiers = err instanceof ApiError ? err.suggestedTiers : [];
       
       setState({
         loading: false,
         error: errorMessage,
         traceId,
+        missingFields,
+        suggestedTiers,
       });
       return null;
     }

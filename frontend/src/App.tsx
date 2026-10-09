@@ -129,7 +129,18 @@ function App() {
   const [bookingForm, setBookingForm] = useState({ name: '', email: '', comment: '' });
   const [bookingStatus, setBookingStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [bookingLoading, setBookingLoading] = useState(false);
-  const { loading, error, traceId, submitPlan, checkBackendHealth, clearError } = usePlan();
+  const { loading, error, traceId, missingFields, suggestedTiers, submitPlan, checkBackendHealth, clearError } = usePlan();
+
+  const handleAddTier = (tier: string) => {
+    const tierLabels: Record<string, string> = {
+      budget: 'on a budget (~$70/day)',
+      moderate: 'with a moderate budget (~$180/day)',
+      luxury: 'with a luxury budget (~$400/day)',
+    };
+    const addition = tierLabels[tier] || `with a ${tier} budget`;
+    setRequestText(prev => `${prev.trim()} ${addition}`.trim());
+    clearError();
+  };
 
   // Progress step simulation for long LLM calls
   const LOADING_STEPS = [
@@ -255,12 +266,33 @@ function App() {
 
         {/* Error Display */}
         {error && (
-          <div className="error-banner">
-            <div className="error-content">
-              <span>⚠️</span>
-              <span>{error}</span>
+          <div className="error-banner" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+              <div className="error-content">
+                <span>⚠️</span>
+                <span>{error}</span>
+              </div>
+              <button className="error-close" onClick={clearError}>×</button>
             </div>
-            <button className="error-close" onClick={clearError}>×</button>
+            {missingFields.includes('budget') && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', paddingLeft: '28px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 600, color: '#92400e' }}>Select a budget tier to add:</span>
+                {(suggestedTiers.length > 0 ? suggestedTiers : [
+                  { tier: 'budget', label: '🎒 Budget (~$70/day)' },
+                  { tier: 'moderate', label: '🏨 Moderate (~$180/day)' },
+                  { tier: 'luxury', label: '✨ Luxury (~$400+/day)' }
+                ]).map(t => (
+                  <button
+                    key={t.tier}
+                    type="button"
+                    onClick={() => handleAddTier(t.tier)}
+                    style={{ padding: '5px 12px', fontSize: '12px', borderRadius: '16px', border: '1px solid #d97706', background: '#fff', color: '#92400e', cursor: 'pointer', fontWeight: 600, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -276,7 +308,7 @@ function App() {
                 <input
                   type="text"
                   className="search-input"
-                  placeholder="Describe your perfect trip... (e.g., 5 days in NYC for art lovers on a budget)"
+                  placeholder="Describe your trip: Destination, duration, and budget (e.g., 5 days in Tokyo for $2,000)"
                   value={requestText}
                   onChange={(e) => setRequestText(e.target.value)}
                   disabled={loading}
@@ -293,6 +325,34 @@ function App() {
                 )}
               </button>
             </form>
+
+            {/* Quick 3-Pillar Guidance & Budget Chips */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', marginTop: '10px', flexWrap: 'wrap', fontSize: '12px', color: 'rgba(255,255,255,0.85)' }}>
+              <span>Required: 📍 Destination · 📅 Duration · 💰 Budget</span>
+              <span style={{ opacity: 0.6 }}>|</span>
+              <span style={{ opacity: 0.9 }}>Quick styles:</span>
+              <button
+                type="button"
+                onClick={() => handleAddTier('budget')}
+                style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: '12px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' }}
+              >
+                🎒 Budget ($70/d)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddTier('moderate')}
+                style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: '12px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' }}
+              >
+                🏨 Moderate ($180/d)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleAddTier('luxury')}
+                style={{ background: 'rgba(255,255,255,0.15)', border: '1px solid rgba(255,255,255,0.3)', color: '#fff', borderRadius: '12px', padding: '2px 8px', fontSize: '11px', cursor: 'pointer' }}
+              >
+                ✨ Luxury ($400/d)
+              </button>
+            </div>
             {loading && (
               <div style={{ marginTop: '16px', padding: '12px 16px', background: 'rgba(255,255,255,0.12)', borderRadius: '10px', backdropFilter: 'blur(8px)', color: '#fff', fontSize: '14px' }}>
                 {LOADING_STEPS[loadingStep]}

@@ -13,8 +13,9 @@ from ..models import (
     TravelConstraints, DraftItinerary, FinalItinerary, ReviewReport,
     ActivityCatalog, LogisticsOutput, BudgetBreakdown, DayItinerary,
     DayItineraryItem, BudgetCategory, ActivityType, PlanInsights,
-    TripStructure, Region
+    TripStructure, Region, MissingConstraintError, InvalidConstraintError
 )
+from ..llm.token_tracker import TokenBudgetExceeded
 from ..config import get_settings
 from .destination import DestinationAgent
 from .logistics import LogisticsAgent
@@ -31,10 +32,11 @@ class OrchestratorAgent:
     
     Responsibilities:
     1. Parse NL request → TravelConstraints (Phase 2) with Groq LLM
-    2. Dispatch parallel workers with constraints (Phase 5)
-    3. Merge agent outputs → DraftItinerary (Phase 5)
-    4. Manage Review → Repair loop (Phase 7)
-    5. Produce FinalItinerary for user
+    2. Strict Pre-flight Validation of 3 core pillars: Destination, Duration, Budget
+    3. Dispatch parallel workers with constraints (Phase 5)
+    4. Merge agent outputs → DraftItinerary (Phase 5)
+    5. Manage Review → Repair loop (Phase 7)
+    6. Produce FinalItinerary for user
     
     Token Management:
     - Uses Groq client with 100k tokens/day limit
@@ -62,18 +64,61 @@ class OrchestratorAgent:
         self.budget_agent = BudgetAgent(tool_router=tool_router, llm_client=self.llm_client)
         self.review_agent = ReviewAgent(llm_client=self.llm_client)  # Phase 6
         self.trip_structuring_agent = TripStructuringAgent(llm_client=self.llm_client)
+
+    def validate_constraints(self, constraints: TravelConstraints) -> TravelConstraints:
+        """
+        Strict 3-Pillar Validation Gatekeeper:
+        Verifies that Destination, Duration, and Budget (or tier) are all present.
+        If any are missing, raises MissingConstraintError BEFORE worker agents run.
+        """
+        missing_fields = []
+        
+        # 1. Validate Destination
+        dest = constraints.destination_region
+        if not dest or dest.strip().lower() in ["unknown", "world", "none", "null", ""]:
+            missing_fields.append("destination")
+            
+        # 2. Validate Duration
+        duration = constraints.duration_days
+        if not duration or duration <= 0:
+            missing_fields.append("duration")
+            
+        # 3. Validate Budget / Tier
+        budget = constraints.budget_total
+        tier = (constraints.budget_tier or "").lower().strip()
+        
+        if (not budget or budget <= 0) and not tier:
+            missing_fields.append("budget")
+            
+        if missing_fields:
+            raise MissingConstraintError(missing_fields=missing_fields)
+            
+        # If budget tier was provided without an exact budget amount, calculate realistic benchmark
+        if (not budget or budget <= 0) and tier and duration and duration > 0:
+            tier_daily_usd = {
+                "budget": 70.0,
+                "moderate": 180.0,
+                "luxury": 400.0
+            }.get(tier, 180.0)
+            
+            # Currency conversion factors
+            curr = (constraints.currency or "USD").upper()
+            fx_to_currency = {
+                "USD": 1.0,
+                "INR": 83.0,
+                "EUR": 0.92,
+                "GBP": 0.79,
+                "JPY": 150.0
+            }.get(curr, 1.0 if curr == "USD" else 83.0)
+            
+            calculated_budget = round(duration * tier_daily_usd * fx_to_currency, 2)
+            constraints.budget_total = calculated_budget
+            
+        return constraints
     
     async def extract_constraints(self, natural_language_request: str) -> TravelConstraints:
         """
         Phase 2: Extract structured constraints from NL request using Groq LLM.
-        
-        Uses structured JSON output for reliable parsing:
-        - destination_region, cities[], duration_days
-        - budget_total, currency
-        - preferences[], avoidances[]
-        - hard_requirements vs soft_preferences
-        
-        Token Usage: ~2,500-4,000 tokens per extraction
         """
         # Use configured LLM client (Groq by default)
         if self.llm_client is None:
@@ -86,35 +131,20 @@ class OrchestratorAgent:
         try:
             constraints = await self.llm_client.extract_constraints(natural_language_request)
             return constraints
+        except TokenBudgetExceeded as e:
+            # Genuine Groq token limit
+            raise RuntimeError(
+                f"Daily token budget exceeded ({e.limit} tokens/day). "
+                f"Check status at /api/tokens/status or wait until UTC midnight."
+            ) from e
         except Exception as e:
             # Log error and provide helpful context
             print(f"Constraint extraction failed: {e}")
-            
-            # Check if it's a token budget issue
-            if "budget" in str(e).lower():
-                raise RuntimeError(
-                    f"Daily token budget exceeded. "
-                    f"Check status at /api/tokens/status or wait until UTC midnight."
-                ) from e
-            
-            # Re-raise with context
             raise RuntimeError(f"Failed to extract constraints: {e}") from e
     
     async def create_plan(self, natural_language_request: str, trace_id: str = "unknown") -> FinalItinerary:
         """
         Phase 5-8: Full orchestration pipeline with Review, Repair loop, timeouts, and observability.
-        
-        Pipeline:
-        1. Extract constraints (Phase 2)
-        2. Run agents in parallel (Phase 4a, 4b, 4c) with timeouts
-        3. Merge outputs → DraftItinerary (Phase 5)
-        4. Review → Repair loop (Phase 6-7, max 3 retries)
-        5. Return FinalItinerary with disclaimer
-        
-        Phase 8 additions:
-        - Per-agent timeouts and partial failure handling
-        - Structured observability logging
-        - Total plan timing and logging
         """
         plan_start_time = time.time()
         timeout_seconds = self._settings.agent_timeout_seconds
@@ -134,6 +164,10 @@ class OrchestratorAgent:
                 "fallback_to_stub", "Constraint extraction timed out"
             )
             raise RuntimeError(f"Constraint extraction timed out after {timeout_seconds}s")
+            
+        # Step 1.2: STRICT 3-PILLAR VALIDATION (Destination, Duration, Budget)
+        # Halts IMMEDIATELY if any are missing, before invoking expensive downstream agents
+        constraints = self.validate_constraints(constraints)
         
         # Step 1.5: Trip Structuring (NEW - from improvement.md)
         trip_structure = None
@@ -297,21 +331,28 @@ class OrchestratorAgent:
             ObservabilityLogger.log_partial_failure(
                 trace_id, "destination_agent", "use_static_catalog", str(e)[:100]
             )
-            activity_catalog = self.destination_agent._get_static_catalog_for_constraints(constraints)
+            from ..models import ActivityCatalog
+            all_acts = []
+            per_city_map = {}
+            for city in constraints.cities:
+                city_acts = self.destination_agent._generate_generic_activities(city, constraints)
+                per_city_map[city] = [a.id for a in city_acts]
+                all_acts.extend(city_acts)
+            activity_catalog = ActivityCatalog(activities=all_acts, per_city=per_city_map, neighborhood_notes={})
         
-        # Logistics + Budget in parallel
-        logistics_task = self._run_logistics_with_timeout(constraints, activity_catalog, timeout_seconds, trace_id)
-        budget_task = self._run_budget_with_timeout(constraints, timeout_seconds, trace_id)
-        logistics_output, budget_breakdown = await asyncio.gather(logistics_task, budget_task, return_exceptions=True)
-        
-        if isinstance(logistics_output, Exception):
+        # Logistics then Budget (sequential to avoid Groq OTPM rate limits)
+        try:
+            logistics_output = await self._run_logistics_with_timeout(constraints, activity_catalog, timeout_seconds, trace_id)
+        except Exception:
             from ..models import LogisticsOutput
             logistics_output = LogisticsOutput(
                 lodging_plans=[], movement_plans=[], day_skeletons=[],
                 total_estimated_transit_hours=0.0,
                 logistics_summary="Fallback - logistics unavailable"
             )
-        if isinstance(budget_breakdown, Exception):
+        try:
+            budget_breakdown = await self._run_budget_with_timeout(constraints, timeout_seconds, trace_id)
+        except Exception:
             from ..models import BudgetBreakdown
             budget_breakdown = BudgetBreakdown(
                 categories=[], grand_total=0.0, currency=constraints.currency,
@@ -362,7 +403,13 @@ class OrchestratorAgent:
                 neighborhood_notes.update(region_catalog.neighborhood_notes)
             except Exception as e:
                 print(f"  Region {region.name} destination failed: {e}")
-                region_catalog = self.destination_agent._get_static_catalog_for_constraints(region_constraints)
+                from ..models import ActivityCatalog
+                region_acts = self.destination_agent._generate_generic_activities(region.base_location, region_constraints)
+                region_catalog = ActivityCatalog(
+                    activities=region_acts,
+                    per_city={region.base_location: [a.id for a in region_acts]},
+                    neighborhood_notes={}
+                )
                 all_activities.extend(region_catalog.activities)
                 per_city.update(region_catalog.per_city)
             
@@ -491,11 +538,11 @@ class OrchestratorAgent:
         # Create lookup for activities by ID
         activity_by_id = {a.id: a for a in activity_catalog.activities}
         
-        # Track used activities across all days to ensure variety
-        used_activity_ids = set()
-        
+        activity_use_count: dict = {}
+
         # Build each day from logistics skeletons
         for skeleton in logistics_output.day_skeletons:
+            used_activity_ids = set()
             day_items: List[DayItineraryItem] = []
             day_cost = 0.0
             
@@ -527,10 +574,12 @@ class OrchestratorAgent:
                     skeleton.city,
                     activity_catalog,
                     activity_by_id,
-                    used_activity_ids
+                    used_activity_ids,
+                    activity_use_count
                 )
                 if activity_ref:
                     used_activity_ids.add(activity_ref)
+                    activity_use_count[activity_ref] = activity_use_count.get(activity_ref, 0) + 1
                     
                     # Get cost estimate if we found an activity
                     if activity_ref and activity_ref in activity_by_id:
@@ -595,43 +644,40 @@ class OrchestratorAgent:
         city: str,
         catalog: ActivityCatalog,
         activity_by_id: Dict[str, Any],
-        used_ids: set = None
+        used_ids: set = None,
+        use_count: dict = None
     ) -> Optional[str]:
-        """Find appropriate activity ID for a given slot type."""
+        """Find appropriate activity ID for a given slot type, preferring least-used."""
         if used_ids is None:
             used_ids = set()
-        
-        # Get activities for this city
+        if use_count is None:
+            use_count = {}
+
         city_data = catalog.per_city.get(city)
         if not city_data:
             return None
-        
-        available_ids = city_data  # per_city is Dict[str, List[str]]
-        
-        # Map slot type to activity type preferences
+
+        available_ids = [aid for aid in city_data if aid not in used_ids]
+        available_ids.sort(key=lambda aid: use_count.get(aid, 0))
+
         type_preferences = {
             "morning": ["temple", "museum", "nature"],
-            "afternoon": ["temple", "nature", "shopping"],
+            "afternoon": ["temple", "nature", "shopping", "entertainment"],
             "lunch": ["food"],
             "dinner": ["food"],
         }
-        
+
         preferences = type_preferences.get(slot_type, [])
-        
-        # Find first activity matching preferences (not already used)
+
         for activity_id in available_ids:
-            if activity_id in used_ids:
-                continue
             if activity_id in activity_by_id:
                 activity = activity_by_id[activity_id]
                 if any(pref in str(activity.type).lower() for pref in preferences):
                     return activity_id
-        
-        # Fallback: return first unused activity
-        for activity_id in available_ids:
-            if activity_id not in used_ids:
-                return activity_id
-        
+
+        if available_ids:
+            return available_ids[0]
+
         return None
     
     def _estimate_activity_cost(self, activity: Any) -> float:

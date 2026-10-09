@@ -1,194 +1,22 @@
 """
-Trip Structuring Agent — New hierarchical planning layer.
+Trip Structuring Agent — Hierarchical planning layer.
 Converts TravelConstraints into structured regions and route plan
 BEFORE the parallel worker agents execute.
+
+Uses LLM to generate region breakdowns for ANY destination,
+instead of relying on hardcoded route databases.
 """
 
+import json
 from typing import List, Optional
 from ..models.schemas import TravelConstraints, TripStructure, Region
 
 
-# Known road trip route databases
-ROAD_TRIP_ROUTES = {
-    "iceland": {
-        "route": ["Reykjavik", "Golden Circle", "South Coast", "Vik", "Skaftafell",
-                  "Hofn", "East Fjords", "Myvatn", "Akureyri", "Snaefellsnes", "Reykjavik"],
-        "regions": [
-            Region(name="Reykjavik & Golden Circle", base_location="Reykjavik", days=3,
-                   highlights=["Hallgrimskirkja", "Thingvellir", "Geysir", "Gullfoss", "Blue Lagoon"]),
-            Region(name="South Coast", base_location="Vik", days=3,
-                   highlights=["Seljalandsfoss", "Skogafoss", "Reynisfjara Black Beach", "Dyrholaey"]),
-            Region(name="Glacier Region", base_location="Hofn", days=3,
-                   highlights=["Skaftafell Glacier", "Svartifoss", "Jokulsarlon Lagoon", "Diamond Beach"]),
-            Region(name="East Fjords", base_location="Egilsstadir", days=2,
-                   highlights=["Seydisfjordur", "Lagarfljot", "East Fjord villages"]),
-            Region(name="North Iceland", base_location="Akureyri", days=3,
-                   highlights=["Godafoss", "Myvatn", "Husavik whale watching", "Dettifoss"]),
-            Region(name="West Iceland & Snaefellsnes", base_location="Borgarnes", days=2,
-                   highlights=["Kirkjufell", "Arnarstapi", "Hraunfossar", "Snaefellsjokull"]),
-        ]
-    },
-    "norway": {
-        "route": ["Oslo", "Bergen", "Flam", "Geiranger", "Alesund", "Tromso"],
-        "regions": [
-            Region(name="Oslo", base_location="Oslo", days=2,
-                   highlights=["Opera House", "Vigeland Park", "Viking Ship Museum"]),
-            Region(name="Bergen & Fjords", base_location="Bergen", days=3,
-                   highlights=["Bryggen", "Floibanen", "Flam Railway", "Sognefjorden"]),
-            Region(name="Geirangerfjord", base_location="Geiranger", days=2,
-                   highlights=["Geirangerfjord cruise", "Trollstigen", "Seven Sisters"]),
-            Region(name="Northern Norway", base_location="Tromso", days=3,
-                   highlights=["Arctic Cathedral", "Northern Lights", "Whale safari"]),
-        ]
-    },
-    "new zealand": {
-        "route": ["Auckland", "Rotorua", "Taupo", "Wellington", "Kaikoura", "Queenstown", "Milford Sound"],
-        "regions": [
-            Region(name="Auckland & Northland", base_location="Auckland", days=2,
-                   highlights=["Sky Tower", "Waiheke Island", "Hobbiton"]),
-            Region(name="Rotorua & Taupo", base_location="Rotorua", days=3,
-                   highlights=["Geothermal parks", "Maori culture", "Lake Taupo", "Tongariro"]),
-            Region(name="Wellington", base_location="Wellington", days=2,
-                   highlights=["Te Papa Museum", "Cable Car", "Cuba Street"]),
-            Region(name="South Island Highlights", base_location="Queenstown", days=4,
-                   highlights=["Milford Sound", "Bungee jumping", "Lake Wanaka", "Remarkables"]),
-        ]
-    },
-    "scotland": {
-        "route": ["Edinburgh", "Stirling", "Glencoe", "Isle of Skye", "Inverness", "Glasgow"],
-        "regions": [
-            Region(name="Edinburgh", base_location="Edinburgh", days=2,
-                   highlights=["Edinburgh Castle", "Royal Mile", "Arthur's Seat"]),
-            Region(name="Highlands", base_location="Fort William", days=3,
-                   highlights=["Glencoe", "Ben Nevis", "Glenfinnan Viaduct"]),
-            Region(name="Isle of Skye", base_location="Portree", days=2,
-                   highlights=["Old Man of Storr", "Fairy Pools", "Quiraing"]),
-            Region(name="Inverness & Loch Ness", base_location="Inverness", days=2,
-                   highlights=["Loch Ness", "Urquhart Castle", "Culloden"]),
-        ]
-    },
-    "switzerland": {
-        "route": ["Zurich", "Lucerne", "Interlaken", "Zermatt", "Geneva"],
-        "regions": [
-            Region(name="Zurich & Lucerne", base_location="Lucerne", days=2,
-                   highlights=["Chapel Bridge", "Lake Lucerne", "Mount Pilatus"]),
-            Region(name="Bernese Oberland", base_location="Interlaken", days=3,
-                   highlights=["Jungfraujoch", "Grindelwald", "Lauterbrunnen", "Lake Brienz"]),
-            Region(name="Zermatt & Matterhorn", base_location="Zermatt", days=2,
-                   highlights=["Matterhorn", "Gornergrat", "Glacier Paradise"]),
-            Region(name="Geneva & Lausanne", base_location="Geneva", days=2,
-                   highlights=["Jet d'Eau", "Lake Geneva", "Montreux"]),
-        ]
-    },
-    "ireland": {
-        "route": ["Dublin", "Kilkenny", "Cork", "Ring of Kerry", "Cliffs of Moher", "Galway"],
-        "regions": [
-            Region(name="Dublin", base_location="Dublin", days=2,
-                   highlights=["Trinity College", "Temple Bar", "Guinness Storehouse"]),
-            Region(name="South Ireland", base_location="Cork", days=2,
-                   highlights=["Blarney Castle", "Kilkenny", "Rock of Cashel"]),
-            Region(name="Kerry & Ring of Kerry", base_location="Killarney", days=3,
-                   highlights=["Ring of Kerry", "Killarney National Park", "Dingle Peninsula"]),
-            Region(name="West Ireland", base_location="Galway", days=2,
-                   highlights=["Cliffs of Moher", "Aran Islands", "Connemara"]),
-        ]
-    },
-    "portugal": {
-        "route": ["Lisbon", "Sintra", "Porto", "Douro Valley", "Algarve"],
-        "regions": [
-            Region(name="Lisbon & Sintra", base_location="Lisbon", days=3,
-                   highlights=["Belem Tower", "Alfama", "Sintra palaces", "Cascais"]),
-            Region(name="Porto & Douro", base_location="Porto", days=3,
-                   highlights=["Ribeira", "Port wine cellars", "Douro Valley cruise"]),
-            Region(name="Algarve Coast", base_location="Lagos", days=2,
-                   highlights=["Ponta da Piedade", "Benagil Cave", "Faro"]),
-        ]
-    },
-}
-
-# Multi-city route databases
-MULTI_CITY_ROUTES = {
-    "japan": {
-        "route": ["Tokyo", "Hakone", "Kyoto", "Osaka"],
-        "regions": [
-            Region(name="Tokyo", base_location="Tokyo", days=3,
-                   highlights=["Senso-ji", "Shibuya", "TeamLab", "Tsukiji"]),
-            Region(name="Hakone", base_location="Hakone", days=1,
-                   highlights=["Mt. Fuji views", "Hakone Shrine", "Hot springs"]),
-            Region(name="Kyoto", base_location="Kyoto", days=3,
-                   highlights=["Fushimi Inari", "Kinkaku-ji", "Arashiyama", "Gion"]),
-            Region(name="Osaka", base_location="Osaka", days=2,
-                   highlights=["Dotonbori", "Osaka Castle", "Street food"]),
-        ]
-    },
-    "italy": {
-        "route": ["Rome", "Florence", "Cinque Terre", "Venice"],
-        "regions": [
-            Region(name="Rome", base_location="Rome", days=3,
-                   highlights=["Colosseum", "Vatican", "Trastevere", "Pantheon"]),
-            Region(name="Florence & Tuscany", base_location="Florence", days=3,
-                   highlights=["Uffizi", "Duomo", "Ponte Vecchio", "Chianti"]),
-            Region(name="Cinque Terre", base_location="Monterosso", days=2,
-                   highlights=["Five villages", "Hiking trails", "Seafood"]),
-            Region(name="Venice", base_location="Venice", days=2,
-                   highlights=["St. Mark's", "Grand Canal", "Murano", "Burano"]),
-        ]
-    },
-    "spain": {
-        "route": ["Barcelona", "Madrid", "Seville", "Granada"],
-        "regions": [
-            Region(name="Barcelona", base_location="Barcelona", days=3,
-                   highlights=["Sagrada Familia", "Park Guell", "Las Ramblas", "Gothic Quarter"]),
-            Region(name="Madrid", base_location="Madrid", days=2,
-                   highlights=["Prado Museum", "Retiro Park", "Plaza Mayor"]),
-            Region(name="Andalusia", base_location="Seville", days=3,
-                   highlights=["Alcazar", "Alhambra", "Flamenco", "Tapas"]),
-        ]
-    },
-    "thailand": {
-        "route": ["Bangkok", "Chiang Mai", "Chiang Rai", "Krabi", "Phuket"],
-        "regions": [
-            Region(name="Bangkok", base_location="Bangkok", days=3,
-                   highlights=["Grand Palace", "Wat Pho", "Chatuchak Market", "Chinatown", "Khao San Road"]),
-            Region(name="Chiang Mai & North", base_location="Chiang Mai", days=3,
-                   highlights=["Doi Suthep Temple", "Old City Temples", "Night Bazaar", "Elephant Sanctuary", "Doi Inthanon"]),
-            Region(name="Chiang Rai", base_location="Chiang Rai", days=2,
-                   highlights=["White Temple", "Blue Temple", "Black House", "Golden Triangle"]),
-            Region(name="Southern Islands", base_location="Krabi", days=3,
-                   highlights=["Railay Beach", "Phi Phi Islands", "Tiger Cave Temple", "Ao Nang", "Four Islands Tour"]),
-        ]
-    },
-    "vietnam": {
-        "route": ["Hanoi", "Ha Long Bay", "Hue", "Hoi An", "Ho Chi Minh City"],
-        "regions": [
-            Region(name="Hanoi & Ha Long Bay", base_location="Hanoi", days=3,
-                   highlights=["Old Quarter", "Ho Chi Minh Mausoleum", "Ha Long Bay cruise", "Temple of Literature"]),
-            Region(name="Central Vietnam", base_location="Hoi An", days=3,
-                   highlights=["Hoi An Ancient Town", "My Son Sanctuary", "Hue Imperial City", "Marble Mountains"]),
-            Region(name="Ho Chi Minh City", base_location="Ho Chi Minh City", days=2,
-                   highlights=["Cu Chi Tunnels", "War Remnants Museum", "Ben Thanh Market", "Mekong Delta"]),
-        ]
-    },
-    "india": {
-        "route": ["Delhi", "Agra", "Jaipur", "Udaipur", "Goa"],
-        "regions": [
-            Region(name="Delhi", base_location="Delhi", days=2,
-                   highlights=["Red Fort", "Qutub Minar", "Chandni Chowk", "India Gate"]),
-            Region(name="Agra", base_location="Agra", days=2,
-                   highlights=["Taj Mahal", "Agra Fort", "Fatehpur Sikri"]),
-            Region(name="Rajasthan", base_location="Jaipur", days=3,
-                   highlights=["Amber Fort", "Hawa Mahal", "City Palace", "Udaipur Lake Palace"]),
-            Region(name="Goa", base_location="Goa", days=3,
-                   highlights=["Beaches", "Old Goa Churches", "Spice Plantations", "Dudhsagar Falls"]),
-        ]
-    },
-}
-
-
 class TripStructuringAgent:
     """
-    NEW agent that creates trip structure BEFORE parallel execution.
+    Creates trip structure BEFORE parallel execution.
     Divides trips into logical regions with day allocations.
+    Uses LLM knowledge to generate regions for any destination worldwide.
     """
 
     def __init__(self, llm_client=None):
@@ -197,67 +25,123 @@ class TripStructuringAgent:
     async def structure(self, constraints: TravelConstraints) -> TripStructure:
         """
         Convert TravelConstraints into a TripStructure with regions.
-        
+
         Rules:
         - duration > 7 days → MUST create multiple regions
-        - road trip destinations → use known route databases
+        - road trip → generate a driving route with ordered stops
         - Total allocated days MUST equal duration_days
-        - Avoid assigning all days to one location
         """
-        dest_lower = constraints.destination_region.lower().strip()
         duration = constraints.duration_days
 
-        # Single city / short trip
         if duration <= 7 and len(constraints.cities) <= 2 and not constraints.is_road_trip:
             return self._structure_city_trip(constraints)
 
-        # Check road trip routes first
-        if dest_lower in ROAD_TRIP_ROUTES or constraints.is_road_trip:
-            return self._structure_road_trip(dest_lower, duration, constraints)
+        if self.llm_client:
+            try:
+                return await self._llm_generate_structure(constraints)
+            except Exception as e:
+                print(f"LLM trip structuring failed: {e}")
 
-        # Check multi-city routes
-        if dest_lower in MULTI_CITY_ROUTES:
-            return self._structure_multi_city(dest_lower, duration, constraints)
-
-        # Long trip to unknown destination → create regions from cities
         return self._structure_from_cities(constraints)
 
-    def _structure_road_trip(self, dest: str, duration: int, constraints: TravelConstraints) -> TripStructure:
-        """Structure a road trip using known route databases."""
-        route_data = ROAD_TRIP_ROUTES.get(dest)
-        if not route_data:
-            # Unknown road trip destination, fall back to cities
-            return self._structure_from_cities(constraints)
+    async def _llm_generate_structure(self, constraints: TravelConstraints) -> TripStructure:
+        """Use LLM to generate a region-based trip structure for any destination."""
+        trip_type = "road_trip" if constraints.is_road_trip else "multi_region"
 
-        template_regions = route_data["regions"]
-        route = route_data["route"]
+        system_prompt = f"""You are a travel route planner. Generate a trip structure for a {constraints.duration_days}-day {"road trip" if constraints.is_road_trip else "trip"} to {constraints.destination_region}.
 
-        # Scale regions to fit duration
-        regions = self._scale_regions_to_duration(template_regions, duration)
+Respond with valid JSON:
+{{
+  "trip_type": "{trip_type}",
+  "regions": [
+    {{
+      "name": "Region or area name",
+      "base_location": "Main city or town to stay",
+      "days": number of days to spend,
+      "highlights": ["3-5 specific must-see attractions or experiences"]
+    }}
+  ],
+  "route": ["ordered list of stops/cities"],
+  "pace": "relaxed" or "balanced" or "aggressive"
+}}
 
-        return TripStructure(
-            trip_type="road_trip",
-            regions=regions,
-            route=route,
-            pace=self._determine_pace(duration, len(regions))
+Rules:
+- Total days across all regions MUST equal exactly {constraints.duration_days}
+- Each region gets at least 1 day
+- Use REAL place names, not generic labels
+- Order regions geographically to minimize backtracking
+- {"Plan as a driving route with logical road connections" if constraints.is_road_trip else "Plan as a multi-city itinerary with logical travel connections"}
+- Include the user's specified cities: {', '.join(constraints.cities)}
+- Highlights should be specific landmarks, not generic descriptions"""
+
+        user_prompt = f"""Plan a {constraints.duration_days}-day {"road trip" if constraints.is_road_trip else "trip"} to {constraints.destination_region}.
+Cities to include: {', '.join(constraints.cities)}
+Preferences: {', '.join(constraints.preferences) if constraints.preferences else 'general sightseeing'}
+Budget level: {constraints.budget_total} {constraints.currency}"""
+
+        content = await self.llm_client.chat_with_retry(
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=900,
+            response_format={"type": "json_object"}
         )
 
-    def _structure_multi_city(self, dest: str, duration: int, constraints: TravelConstraints) -> TripStructure:
-        """Structure a multi-city trip."""
-        route_data = MULTI_CITY_ROUTES.get(dest)
-        if not route_data:
-            return self._structure_from_cities(constraints)
+        data = json.loads(content)
 
-        template_regions = route_data["regions"]
-        route = route_data["route"]
-        regions = self._scale_regions_to_duration(template_regions, duration)
+        regions = []
+        for r in data.get("regions", []):
+            regions.append(Region(
+                name=r["name"],
+                base_location=r["base_location"],
+                days=r["days"],
+                highlights=r.get("highlights", [])[:5]
+            ))
+
+        total_days = sum(r.days for r in regions)
+        if total_days != constraints.duration_days:
+            regions = self._adjust_days_to_match(regions, constraints.duration_days)
 
         return TripStructure(
-            trip_type="multi_region",
+            trip_type=data.get("trip_type", trip_type),
             regions=regions,
-            route=route,
-            pace=self._determine_pace(duration, len(regions))
+            route=data.get("route", [r.base_location for r in regions]),
+            pace=data.get("pace", self._determine_pace(constraints.duration_days, len(regions)))
         )
+
+    def _adjust_days_to_match(self, regions: List[Region], target: int) -> List[Region]:
+        """Ensure total allocated days equals the target duration."""
+        if not regions:
+            return regions
+
+        total = sum(r.days for r in regions)
+        adjusted = [r.model_copy() for r in regions]
+
+        while total != target:
+            if total < target:
+                largest_idx = max(range(len(adjusted)), key=lambda i: adjusted[i].days)
+                adjusted[largest_idx] = Region(
+                    name=adjusted[largest_idx].name,
+                    base_location=adjusted[largest_idx].base_location,
+                    days=adjusted[largest_idx].days + 1,
+                    highlights=adjusted[largest_idx].highlights.copy()
+                )
+                total += 1
+            else:
+                candidates = [i for i, r in enumerate(adjusted) if r.days > 1]
+                if not candidates:
+                    break
+                largest_idx = max(candidates, key=lambda i: adjusted[i].days)
+                adjusted[largest_idx] = Region(
+                    name=adjusted[largest_idx].name,
+                    base_location=adjusted[largest_idx].base_location,
+                    days=adjusted[largest_idx].days - 1,
+                    highlights=adjusted[largest_idx].highlights.copy()
+                )
+                total -= 1
+
+        return adjusted
 
     def _structure_city_trip(self, constraints: TravelConstraints) -> TripStructure:
         """Structure a simple city trip (≤ 7 days, 1-2 cities)."""
@@ -282,26 +166,21 @@ class TripStructuringAgent:
         )
 
     def _structure_from_cities(self, constraints: TravelConstraints) -> TripStructure:
-        """Structure from the cities list when no route template exists."""
+        """Fallback: structure from the cities list when LLM is unavailable."""
         cities = constraints.cities
         duration = constraints.duration_days
 
         if len(cities) == 1:
-            # Single city, long trip — split into neighborhoods/areas
             city = cities[0]
             if duration <= 3:
                 regions = [Region(name=city, base_location=city, days=duration, highlights=[])]
             else:
-                # Split into exploration phases
                 half = duration // 2
                 regions = [
-                    Region(name=f"{city} Central", base_location=city, days=half,
-                           highlights=["City landmarks", "Museums", "Markets"]),
-                    Region(name=f"{city} Surroundings", base_location=city, days=duration - half,
-                           highlights=["Day trips", "Nature", "Local experiences"]),
+                    Region(name=f"{city} Central", base_location=city, days=half, highlights=[]),
+                    Region(name=f"{city} Surroundings", base_location=city, days=duration - half, highlights=[]),
                 ]
         else:
-            # Distribute days across cities
             days_per = max(1, duration // len(cities))
             remainder = duration % len(cities)
             regions = []
@@ -321,55 +200,7 @@ class TripStructuringAgent:
             pace=self._determine_pace(duration, len(regions))
         )
 
-    def _scale_regions_to_duration(self, template_regions: List[Region], duration: int) -> List[Region]:
-        """Scale template regions to fit the actual trip duration."""
-        template_total = sum(r.days for r in template_regions)
-
-        if template_total == duration:
-            return [r.model_copy() for r in template_regions]
-
-        # Scale proportionally
-        scale = duration / template_total
-        scaled = []
-
-        for region in template_regions:
-            days = max(1, round(region.days * scale))
-            scaled.append(Region(
-                name=region.name,
-                base_location=region.base_location,
-                days=days,
-                highlights=region.highlights.copy()
-            ))
-
-        # Ensure total equals duration
-        while sum(r.days for r in scaled) != duration:
-            total = sum(r.days for r in scaled)
-            if total < duration:
-                # Add to largest
-                largest_idx = max(range(len(scaled)), key=lambda i: scaled[i].days)
-                scaled[largest_idx] = Region(
-                    name=scaled[largest_idx].name,
-                    base_location=scaled[largest_idx].base_location,
-                    days=scaled[largest_idx].days + 1,
-                    highlights=scaled[largest_idx].highlights.copy()
-                )
-            else:
-                # Subtract from largest that has > 1 day
-                candidates = [i for i, r in enumerate(scaled) if r.days > 1]
-                if not candidates:
-                    break  # Cannot reduce further
-                largest_idx = max(candidates, key=lambda i: scaled[i].days)
-                scaled[largest_idx] = Region(
-                    name=scaled[largest_idx].name,
-                    base_location=scaled[largest_idx].base_location,
-                    days=scaled[largest_idx].days - 1,
-                    highlights=scaled[largest_idx].highlights.copy()
-                )
-
-        return scaled
-
     def _determine_pace(self, duration: int, num_regions: int) -> str:
-        """Determine trip pace based on days-per-region ratio."""
         if num_regions == 0:
             return "balanced"
         ratio = duration / num_regions

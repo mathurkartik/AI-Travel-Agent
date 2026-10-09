@@ -11,7 +11,9 @@ class ApiError extends Error {
   constructor(
     message: string,
     public statusCode?: number,
-    public traceId?: string
+    public traceId?: string,
+    public missingFields: string[] = [],
+    public suggestedTiers: Array<{ tier: string; label: string }> = []
   ) {
     super(message);
     this.name = 'ApiError';
@@ -51,10 +53,29 @@ export async function createPlan(request: PlanRequest): Promise<PlanResponse> {
   
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
+    
+    // Extract user-friendly message from FastAPI HTTPException (which places payload in detail)
+    const detail = errorData.detail;
+    let message = `Request failed: ${response.statusText}`;
+    let missingFields: string[] = [];
+    let suggestedTiers: Array<{ tier: string; label: string }> = [];
+    
+    if (typeof detail === 'object' && detail !== null) {
+      message = detail.message || detail.error || message;
+      missingFields = detail.missing_fields || [];
+      suggestedTiers = detail.suggested_tiers || [];
+    } else if (typeof detail === 'string') {
+      message = detail;
+    } else if (errorData.error) {
+      message = errorData.error;
+    }
+    
     throw new ApiError(
-      errorData.error || `Request failed: ${response.statusText}`,
+      message,
       response.status,
-      traceId || errorData.trace_id
+      traceId || errorData.trace_id,
+      missingFields,
+      suggestedTiers
     );
   }
   
