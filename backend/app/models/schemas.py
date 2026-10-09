@@ -505,6 +505,13 @@ class ReviewReport(BaseModel):
 # Final Output Models
 # ============================================================================
 
+class ExperienceHighlight(BaseModel):
+    """A standout moment in the trip."""
+    title: str = Field(..., max_length=100)
+    description: str = Field(..., max_length=300)
+    tag: str = Field(default="must-see", description="e.g. splurge, romantic, adventure, cultural, hidden-gem")
+
+
 class FinalItinerary(BaseModel):
     """
     User-facing final output.
@@ -512,11 +519,16 @@ class FinalItinerary(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     constraints: TravelConstraints
     days: List[DayItinerary]
-    neighborhoods: Dict[str, List[str]]  # City -> neighborhood suggestions
-    logistics_summary: str  # Inter-city transport overview
-    strategic_insight: Optional[str] = Field(default=None, description="Why this itinerary works (strategic pacing, etc.)")
+    neighborhoods: Dict[str, List[str]]
+    logistics_summary: str
+    strategic_insight: Optional[str] = Field(default=None, description="Why this itinerary works")
     budget_analysis: Optional[str] = Field(default=None, description="Reality check and budget strategy")
     cost_optimization_tips: List[str] = Field(default_factory=list, description="Practical ways to save money")
+    why_this_plan: Optional[str] = Field(default=None, description="Why this plan fits the user's specific preferences")
+    what_not_to_do: List[str] = Field(default_factory=list, description="Common mistakes or tourist traps to avoid")
+    base_selection_rationale: Dict[str, str] = Field(default_factory=dict, description="Per-city rationale for choosing it as a base")
+    experience_highlights: List[ExperienceHighlight] = Field(default_factory=list, description="2-3 standout WOW moments")
+    best_time_to_visit: Optional[str] = Field(default=None, description="Seasonal reasoning")
     budget_rollup: BudgetBreakdown
     review_status: ReviewStatus
     review_warnings: List[str] = Field(default_factory=list)
@@ -532,27 +544,58 @@ class PlanInsights(BaseModel):
     strategic_insight: str
     budget_analysis: str
     cost_optimization_tips: List[str]
-    
-    @field_validator("strategic_insight", "budget_analysis", mode="before")
+    why_this_plan: str = Field(default="", description="Why this plan fits the user's specific preferences and constraints")
+    what_not_to_do: List[str] = Field(default_factory=list, description="Common mistakes or tourist traps to avoid")
+    base_selection_rationale: Dict[str, str] = Field(default_factory=dict, description="Per-city explanation of why it was chosen as a base")
+    experience_highlights: List[ExperienceHighlight] = Field(default_factory=list, description="2-3 standout moments")
+    best_time_to_visit: str = Field(default="", description="Seasonal reasoning for the destination")
+
+    @field_validator("strategic_insight", "budget_analysis", "why_this_plan", "best_time_to_visit", mode="before")
     @classmethod
     def coerce_to_string(cls, v):
-        """LLMs sometimes return a dict/list instead of a string. Coerce gracefully."""
         if isinstance(v, dict):
             import json
             return json.dumps(v, indent=2)
         if isinstance(v, list):
             return "; ".join(str(item) for item in v)
-        return v
-    
-    @field_validator("cost_optimization_tips", mode="before")
+        return v or ""
+
+    @field_validator("cost_optimization_tips", "what_not_to_do", mode="before")
     @classmethod
     def coerce_tips_to_list(cls, v):
-        """Ensure tips is always a list of strings."""
         if isinstance(v, str):
             return [v]
         if isinstance(v, dict):
             return [f"{k}: {val}" for k, val in v.items()]
-        return v
+        return v or []
+
+    @field_validator("base_selection_rationale", mode="before")
+    @classmethod
+    def coerce_rationale_to_dict(cls, v):
+        if isinstance(v, str):
+            return {"general": v}
+        if isinstance(v, list):
+            return {f"city_{i}": str(item) for i, item in enumerate(v)}
+        return v or {}
+
+    @field_validator("experience_highlights", mode="before")
+    @classmethod
+    def coerce_highlights(cls, v):
+        if not v:
+            return []
+        if isinstance(v, list):
+            result = []
+            for item in v:
+                if isinstance(item, dict):
+                    result.append(ExperienceHighlight(
+                        title=str(item.get("title", "Highlight"))[:100],
+                        description=str(item.get("description", ""))[:300],
+                        tag=str(item.get("tag", "must-see"))[:30]
+                    ))
+                elif isinstance(item, str):
+                    result.append(ExperienceHighlight(title=item[:100], description=item[:300], tag="must-see"))
+            return result
+        return []
 
 
 # ============================================================================

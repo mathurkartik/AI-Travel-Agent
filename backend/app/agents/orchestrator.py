@@ -764,6 +764,11 @@ class OrchestratorAgent:
             strategic_insight=insights.strategic_insight if insights else None,
             budget_analysis=insights.budget_analysis if insights else None,
             cost_optimization_tips=insights.cost_optimization_tips if insights else [],
+            why_this_plan=insights.why_this_plan if insights else None,
+            what_not_to_do=insights.what_not_to_do if insights else [],
+            base_selection_rationale=insights.base_selection_rationale if insights else {},
+            experience_highlights=insights.experience_highlights if insights else [],
+            best_time_to_visit=insights.best_time_to_visit if insights else None,
             budget_rollup=budget_breakdown,
             review_status=review_status,
             review_warnings=review_warnings,
@@ -772,36 +777,76 @@ class OrchestratorAgent:
     
     async def _generate_insights(self, constraints: TravelConstraints, draft: DraftItinerary) -> PlanInsights:
         """Generate strategic insights and budget analysis using LLM."""
+        cities_str = ', '.join(set(d.city for d in draft.days))
+        prefs_str = ', '.join(constraints.preferences) if constraints.preferences else 'general sightseeing'
+        avoids_str = ', '.join(constraints.avoidances) if constraints.avoidances else 'none'
+
         if self.llm_client is None:
              return PlanInsights(
                 strategic_insight="A well-paced itinerary balancing major landmarks and local experiences.",
                 budget_analysis=f"The budget of {constraints.budget_total} {constraints.currency} aligns with a comfortable mid-range trip for {constraints.duration_days} days.",
-                cost_optimization_tips=["Book transport in advance", "Use local supermarkets for snacks", "Look for free walking tours"]
+                cost_optimization_tips=["Book transport in advance", "Use local supermarkets for snacks", "Look for free walking tours"],
+                why_this_plan=f"This plan prioritizes {prefs_str} across {cities_str}.",
+                what_not_to_do=["Avoid tourist-trap restaurants near major landmarks"],
+                base_selection_rationale={city: f"Central location with good access to attractions" for city in constraints.cities},
+                experience_highlights=[],
+                best_time_to_visit="Check seasonal weather patterns for optimal timing."
             )
-        
-        system_prompt = """You are a travel strategy expert. Analyze the itinerary and constraints.
-Generate:
-1. strategic_insight: Narrative on why this plan is smart (e.g. 'Covers 100% of the Ring Road', 'Strategic pace').
-2. budget_analysis: A 'Reality Check' on the budget vs duration. Mention if it's budget, mid-range, or luxury.
-3. cost_optimization_tips: 3-5 practical tips to save money for this specific trip.
 
-Respond with valid JSON matching the PlanInsights schema."""
+        system_prompt = f"""You are a world-class travel strategist. The traveler wants: {prefs_str}. They want to avoid: {avoids_str}.
 
-        prompt = f"Constraints: {constraints.model_dump_json()}\nItinerary Summary: Total cost {draft.total_estimated_cost} {draft.currency}, {len(draft.days)} days. Cities: {', '.join(set(d.city for d in draft.days))}"
-        
+Analyze the itinerary deeply and generate a JSON response with ALL these fields:
+
+1. "strategic_insight": 2-3 sentences on WHY this routing/pacing is smart. Reference the user's preferences. Example: "By basing in Old Delhi, you're steps from the best street food lanes AND Mughal architecture — no wasted transit."
+
+2. "budget_analysis": A frank 'Reality Check'. Is the budget tight, comfortable, or generous for this destination? What tier does it land in (backpacker/mid-range/luxury)? What's the daily spending power?
+
+3. "cost_optimization_tips": 3-5 specific, actionable tips for THIS trip (not generic). Reference real local options. Example: "Take the Shatabdi Express instead of a private car to save 60%."
+
+4. "why_this_plan": 2-3 sentences explaining why THIS specific plan matches THEIR stated preferences ({prefs_str}). Connect activities to what they asked for.
+
+5. "what_not_to_do": 3-4 specific mistakes tourists make at THIS destination. Example: "Don't eat at restaurants directly facing the Taj — they charge 3x for mediocre food. Walk 2 blocks to Panchhi Dhaba instead."
+
+6. "base_selection_rationale": Object mapping each city name to a sentence explaining why it's a good base. Example: {{"Delhi": "Old Delhi puts you within walking distance of Chandni Chowk street food and Red Fort"}}
+
+7. "experience_highlights": Array of 2-3 standout moments. Each has "title" (short name), "description" (why it's special), and "tag" (one of: splurge, romantic, adventure, cultural, hidden-gem, must-see). Pick the BEST moments from the itinerary.
+
+8. "best_time_to_visit": 2-3 sentences on seasonal considerations. Mention weather, festivals, peak/off-peak pricing, and the best months.
+
+Respond with valid JSON only. Keep each field concise — quality over quantity."""
+
+        prompt = f"""Trip: {constraints.duration_days} days in {cities_str}
+Budget: {constraints.budget_total} {constraints.currency}
+Preferences: {prefs_str}
+Avoidances: {avoids_str}
+Estimated cost: {draft.total_estimated_cost} {draft.currency}
+Cities visited: {cities_str}
+Days breakdown: {', '.join(f'Day {d.day_number}: {d.city}' for d in draft.days)}"""
+
         try:
-            insights = await self.llm_client.generate_with_schema(
-                prompt=prompt,
-                system_prompt=system_prompt,
-                output_schema=PlanInsights
+            import json as _json
+            content = await self.llm_client.chat_with_retry(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=900,
+                response_format={"type": "json_object"}
             )
+            data = _json.loads(content)
+            insights = PlanInsights.model_validate(data)
             return insights
         except Exception as e:
              print(f"Insight generation failed: {e}")
              return PlanInsights(
                 strategic_insight="A balanced itinerary designed for maximum coverage of the requested regions.",
                 budget_analysis="The budget is sufficient for a standard mid-range experience at this destination.",
-                cost_optimization_tips=["Eat at local markets", "Consider a multi-day regional pass"]
+                cost_optimization_tips=["Eat at local markets", "Consider a multi-day regional pass"],
+                why_this_plan=f"Designed around your interest in {prefs_str}.",
+                what_not_to_do=["Avoid overpriced tourist restaurants near major landmarks"],
+                base_selection_rationale={city: "Good central location" for city in constraints.cities},
+                experience_highlights=[],
+                best_time_to_visit="Check local weather and festival calendars for your travel dates."
             )
     
     async def repair(

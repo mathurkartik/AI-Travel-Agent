@@ -39,6 +39,7 @@ from .schemas import (
     ReviewStatus,
     
     # Final output
+    ExperienceHighlight,
     FinalItinerary,
     PlanInsights,
     
@@ -82,6 +83,7 @@ __all__ = [
     "ReviewReport",
     "ReviewSeverity",
     "ReviewStatus",
+    "ExperienceHighlight",
     "FinalItinerary",
     "PlanInsights",
     "PlanRequest",
