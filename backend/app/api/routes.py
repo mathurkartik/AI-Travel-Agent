@@ -405,6 +405,35 @@ async def debug_llm_test():
         return {"status": "error", "error": str(e), "trace": traceback.format_exc()[-500:]}
 
 
+@router.get("/debug/pipeline-test", tags=["Monitoring"])
+async def debug_pipeline_test():
+    """Test the full pipeline and report where it fails."""
+    import traceback
+    steps = {}
+    try:
+        from ..llm import get_llm_client
+        client = get_llm_client()
+        steps["1_llm_client"] = f"ok ({client.model})"
+
+        from ..agents import OrchestratorAgent
+        orchestrator = OrchestratorAgent(llm_client=client)
+        steps["2_orchestrator_init"] = "ok"
+
+        constraints = await orchestrator.extract_constraints(
+            "Plan a 3-day trip to Paris with a budget of $1000 USD. I love food."
+        )
+        steps["3_extract_constraints"] = f"ok ({constraints.destination_region}, {constraints.duration_days}d, {constraints.budget_total} {constraints.currency})"
+
+        constraints = orchestrator.validate_constraints(constraints)
+        steps["4_validate"] = "ok"
+
+        return {"status": "ok", "steps": steps}
+    except Exception as e:
+        steps["error"] = str(e)
+        steps["trace"] = traceback.format_exc()[-600:]
+        return {"status": "error", "steps": steps}
+
+
 @router.post("/tokens/reset-cache", tags=["Monitoring"])
 async def reset_response_cache():
     """
