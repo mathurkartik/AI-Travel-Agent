@@ -418,7 +418,7 @@ class DayItinerary(BaseModel):
     items: List[DayItineraryItem] = Field(..., max_length=15, description="Activities in this day")
     day_summary: str = Field(..., min_length=1, max_length=500)
     day_cost: float = Field(..., ge=0)
-    lodging_area: Optional[str] = Field(default=None, max_length=100)
+    lodging_area: Optional[str] = Field(default=None, max_length=300)
     
     @field_validator("items")
     @classmethod
