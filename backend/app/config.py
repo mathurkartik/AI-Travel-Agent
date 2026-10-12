@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Gemini Configuration (Default — 1M tokens/min free tier)
     gemini_api_key: str | None = None
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-2.5-flash"
 
     # Groq Configuration (Fallback)
     groq_api_key: str | None = None
