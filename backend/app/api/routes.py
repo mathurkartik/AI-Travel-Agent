@@ -342,7 +342,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                 remaining_buffer=0
             ),
             review_status=ReviewStatus.PASS,
-            disclaimer="Stub mode: LLM unavailable. Set GEMINI_API_KEY for full AI-generated itineraries."
+            disclaimer="Stub mode: LLM unavailable. Set GROQ_API_KEY for full AI-generated itineraries."
         )
         
         return PlanResponse(

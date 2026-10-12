@@ -297,7 +297,7 @@ TRIP TYPE DETECTION:
         """Chat completion with automatic retry on 429 rate limit errors."""
         if not self._client:
             raise RuntimeError("Groq client not initialized")
-        max_tokens = min(max_tokens, 600)
+        max_tokens = min(max_tokens, 2000)
         for attempt in range(max_retries):
             try:
                 kwargs = {

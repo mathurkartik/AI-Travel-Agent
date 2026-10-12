@@ -25,17 +25,17 @@ class Settings(BaseSettings):
     api_port: int = 8000
     cors_origins: str = "http://localhost:5173,http://localhost:5174,http://localhost:3000"
     
-    # LLM Provider (gemini, groq, openai, anthropic)
-    llm_provider: str = "gemini"
+    # LLM Provider (groq, gemini, openai, anthropic)
+    llm_provider: str = "groq"
 
-    # Gemini Configuration (Default — 1M tokens/min free tier)
+    # Groq Configuration (Default — worked reliably for 7 months)
+    groq_api_key: str | None = None
+    groq_model: str = "llama-3.3-70b-versatile"
+    groq_max_tokens_per_request: int = 4000
+
+    # Gemini Configuration (Fallback)
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-3.5-flash"
-
-    # Groq Configuration (Fallback)
-    groq_api_key: str | None = None
-    groq_model: str = "qwen/qwen3.8-27b"
-    groq_max_tokens_per_request: int = 900
     groq_temperature: float = 0.1  # Low for structured extraction
     
     # OpenAI (Fallback)

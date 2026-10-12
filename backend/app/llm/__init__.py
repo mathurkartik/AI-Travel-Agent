@@ -1,5 +1,5 @@
 """
-LLM Client module — supports Gemini (default) and Groq.
+LLM Client module — supports Groq (default) and Gemini (fallback).
 Provides unified interface with token tracking and caching.
 """
 
@@ -14,6 +14,10 @@ def get_llm_client():
     from ..config import get_settings
     settings = get_settings()
     if settings.llm_provider == "gemini" and settings.gemini_api_key:
+        return get_gemini_client()
+    if settings.llm_provider == "groq" and settings.groq_api_key:
+        return get_groq_client()
+    if settings.gemini_api_key:
         return get_gemini_client()
     return get_groq_client()
 
