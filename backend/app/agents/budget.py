@@ -81,8 +81,8 @@ Rules:
 - All amounts in {constraints.currency}
 - For each city, provide stay, food, transport, and activities categories
 - Use realistic local prices for {constraints.currency}
-- If over budget, suggest specific swaps
-- Be specific in notes (mention real hotel tiers, food types, transport modes)"""
+- If over budget, suggest at most 3 specific swaps
+- Keep each note under 12 words (mention real hotel tiers, food types, transport modes)"""
 
         user_prompt = f"""Estimate costs for:
 - Destination: {constraints.destination_region}
@@ -96,7 +96,7 @@ Rules:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=1500
+            max_tokens=3000
         )
 
         content = self._extract_json_content(content)

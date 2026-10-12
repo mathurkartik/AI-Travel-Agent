@@ -54,8 +54,8 @@ class DestinationAgent:
     async def _llm_generate_activities(self, city: str, constraints: TravelConstraints) -> List[Activity]:
         """Use LLM to generate specific activity names with details."""
         days_in_city = max(2, constraints.duration_days // max(1, len(constraints.cities)))
-        non_food_count = min(12, max(6, days_in_city * 3))
-        food_count = min(8, max(4, days_in_city * 2))
+        non_food_count = min(15, max(6, days_in_city * 3))
+        food_count = min(10, max(4, days_in_city * 2))
         activity_count = non_food_count + food_count
 
         system_prompt = f"""You are an expert local guide for {city}. Generate exactly {activity_count} activities.

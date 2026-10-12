@@ -47,6 +47,7 @@ class GroqClient:
         
         self.api_key = api_key or settings.groq_api_key
         self.model = model or settings.groq_model
+        self._primary_blocked_until = 0.0
         self.max_tokens = max_tokens or settings.groq_max_tokens_per_request
         self.temperature = temperature or settings.groq_temperature
         self.enable_tracking = enable_tracking and settings.enable_token_tracking
@@ -186,22 +187,13 @@ TRIP TYPE DETECTION:
 """
 
         try:
-            response = self._client.chat.completions.create(
-                model=self.model,
+            content = await self.chat_with_retry(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": natural_language_request}
                 ],
-                temperature=self.temperature,
-                max_tokens=self.max_tokens
+                max_tokens=1500,
             )
-
-            # Record usage
-            usage = response.usage
-            self._record_usage(usage.prompt_tokens, usage.completion_tokens)
-
-            # Parse and validate — extract JSON from response
-            content = response.choices[0].message.content
             content = self._extract_json(content)
             data = json.loads(content)
             constraints = TravelConstraints.model_validate(data)
@@ -259,22 +251,13 @@ TRIP TYPE DETECTION:
             return cached
         
         try:
-            response = self._client.chat.completions.create(
-                model=self.model,
+            content = await self.chat_with_retry(
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=self.temperature,
-                max_tokens=max_tokens or self.max_tokens
+                max_tokens=max_tokens or 2000,
             )
-
-            # Record usage
-            usage = response.usage
-            self._record_usage(usage.prompt_tokens, usage.completion_tokens)
-            
-            # Parse and validate
-            content = response.choices[0].message.content
             content = self._extract_json(content)
             data = json.loads(content)
             result = output_schema.model_validate(data)
@@ -324,16 +307,19 @@ TRIP TYPE DETECTION:
             raise RuntimeError("Groq client not initialized")
         settings = get_settings()
         max_tokens = min(max_tokens, settings.groq_max_tokens_per_request)
+        fallback = settings.groq_fallback_model
         for attempt in range(max_retries):
+            # Groq rate limits are per model, so use the fallback while the primary's daily quota is exhausted
+            model = fallback if (fallback and time.time() < self._primary_blocked_until) else self.model
             try:
                 kwargs = {
-                    "model": self.model,
+                    "model": model,
                     "messages": messages,
                     "temperature": temperature or self.temperature,
                     "max_tokens": max_tokens,
                 }
                 # gpt-oss spends hidden reasoning tokens that count against the 8k TPM free-tier limit
-                if "gpt-oss" in self.model:
+                if "gpt-oss" in model:
                     kwargs["reasoning_effort"] = "low"
                 response = await asyncio.to_thread(self._client.chat.completions.create, **kwargs)
                 if response.usage:
@@ -342,8 +328,12 @@ TRIP TYPE DETECTION:
             except Exception as e:
                 msg = str(e)
                 if "429" in msg or "rate_limit" in msg:
-                    match = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", msg)
-                    wait = (int(match.group(1) or 0) * 60 + float(match.group(2)) + 1) if match else 5 * (attempt + 1)
+                    match = re.search(r"try again in (?:(\d+)h)?(?:(\d+)m)?([\d.]+)s", msg)
+                    wait = (int(match.group(1) or 0) * 3600 + int(match.group(2) or 0) * 60 + float(match.group(3)) + 1) if match else 5 * (attempt + 1)
+                    if "tokens per day" in msg and model == self.model and fallback and fallback != model:
+                        self._primary_blocked_until = time.time() + wait
+                        print(f"Daily quota hit on {model}; using {fallback} for {wait:.0f}s")
+                        continue
                     wait = min(wait, 30)
                     print(f"Rate limited, waiting {wait:.1f}s (attempt {attempt + 1}/{max_retries})")
                     await asyncio.sleep(wait)

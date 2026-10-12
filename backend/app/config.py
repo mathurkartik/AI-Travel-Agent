@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     groq_api_key: str | None = None
     groq_model: str = "openai/gpt-oss-120b"
     groq_max_tokens_per_request: int = 4000
+    groq_fallback_model: str | None = "openai/gpt-oss-20b"
 
     # Gemini Configuration (Fallback)
     gemini_api_key: str | None = None

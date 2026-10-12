@@ -113,7 +113,17 @@ async def create_plan(request: Request, plan_request: PlanRequest):
         )
         
     except (RuntimeError, TokenBudgetExceeded) as e:
-        # LLM not available or token budget exceeded - use stub
+        if "429" in str(e) or "rate_limit" in str(e).lower():
+            print(f"LLM quota exhausted: {e}")
+            raise HTTPException(
+                status_code=503,
+                detail={
+                    "error": "llm_quota_exceeded",
+                    "message": "Our AI planner has hit its usage limit for now. Please try again in a few minutes.",
+                }
+            )
+
+        # LLM not configured - use stub
         print(f"Using stub mode (LLM unavailable): {e}")
         
         processing_time_ms = int((time.time() - start_time) * 1000)
