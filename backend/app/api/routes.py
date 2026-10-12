@@ -342,7 +342,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
                 remaining_buffer=0
             ),
             review_status=ReviewStatus.PASS,
-            disclaimer="Stub mode: LLM unavailable. Set GROQ_API_KEY for full AI-generated itineraries."
+            disclaimer="Stub mode: LLM unavailable. Set GEMINI_API_KEY for full AI-generated itineraries."
         )
         
         return PlanResponse(
@@ -391,47 +391,18 @@ async def get_token_status():
 
 @router.get("/debug/llm-test", tags=["Monitoring"])
 async def debug_llm_test():
-    """Quick smoke test — dumps raw Gemini response structure."""
+    """Quick smoke test — verifies LLM returns text."""
     try:
         from ..llm import get_llm_client
-        import asyncio
         client = get_llm_client()
-        response = await asyncio.to_thread(
-            client._generate_sync, "Say hello in one sentence.", 50, 0.1, False
+        text = await client.chat_with_retry(
+            messages=[{"role": "user", "content": "Say hello in one sentence."}],
+            max_tokens=50,
         )
-        # Dump everything we can about the response
-        info = {"model": client.model, "response_type": type(response).__name__}
-        try:
-            info["text"] = response.text
-        except Exception as e:
-            info["text_error"] = str(e)
-        if hasattr(response, 'candidates') and response.candidates:
-            c = response.candidates[0]
-            info["candidate_type"] = type(c).__name__
-            info["finish_reason"] = str(getattr(c, 'finish_reason', 'N/A'))
-            content = getattr(c, 'content', None)
-            if content:
-                info["content_type"] = type(content).__name__
-                info["content_role"] = getattr(content, 'role', 'N/A')
-                parts = getattr(content, 'parts', None)
-                if parts:
-                    info["parts_count"] = len(parts)
-                    for i, p in enumerate(parts[:3]):
-                        info[f"part_{i}_type"] = type(p).__name__
-                        info[f"part_{i}_attrs"] = [a for a in dir(p) if not a.startswith('_')][:15]
-                        info[f"part_{i}_text"] = getattr(p, 'text', 'NO_ATTR')
-                        if hasattr(p, 'thought'):
-                            info[f"part_{i}_thought"] = getattr(p, 'thought', None)
-                else:
-                    info["parts"] = "None"
-            else:
-                info["content"] = "None"
-        else:
-            info["candidates"] = "None or empty"
-        return info
+        return {"status": "ok", "model": client.model, "response": text}
     except Exception as e:
         import traceback
-        return {"error": str(e), "trace": traceback.format_exc()[-800:]}
+        return {"status": "error", "error": str(e), "trace": traceback.format_exc()[-500:]}
 
 
 @router.post("/tokens/reset-cache", tags=["Monitoring"])

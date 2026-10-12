@@ -302,7 +302,7 @@ TRIP TYPE DETECTION:
         """Chat completion with automatic retry — matches GroqClient interface."""
         if not self._client:
             raise RuntimeError("Gemini client not initialized")
-        max_tokens = min(max_tokens, 600)
+        max_tokens = min(max_tokens, 2000)
 
         combined = []
         for msg in messages:
