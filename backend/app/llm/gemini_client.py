@@ -142,6 +142,7 @@ class GeminiClient:
         config_kwargs = {
             "temperature": temperature,
             "max_output_tokens": max_tokens,
+            "thinking_config": genai_types.ThinkingConfig(thinking_budget=0),
         }
         if json_mode:
             config_kwargs["response_mime_type"] = "application/json"
