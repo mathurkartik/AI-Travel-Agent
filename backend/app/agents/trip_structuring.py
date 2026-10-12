@@ -84,7 +84,7 @@ Budget level: {constraints.budget_total} {constraints.currency}"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=900
+            max_tokens=2000
         )
 
         content = content.strip()

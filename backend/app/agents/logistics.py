@@ -45,13 +45,14 @@ class LogisticsAgent:
             text = text[brace:]
         return text
 
-    async def plan(self, constraints: TravelConstraints, activity_catalog: Optional[any] = None) -> LogisticsOutput:
+    async def plan(self, constraints: TravelConstraints, activity_catalog: Optional[any] = None,
+                   neighborhoods_map: Optional[Dict[str, List[str]]] = None) -> LogisticsOutput:
         """Generate logistics plan from constraints."""
         cities = constraints.cities
         duration = constraints.duration_days
 
         night_allocation = self._allocate_nights(cities, duration)
-        lodging_plans = await self._create_lodging_plans(cities, night_allocation, constraints, activity_catalog)
+        lodging_plans = await self._create_lodging_plans(cities, night_allocation, constraints, activity_catalog, neighborhoods_map)
         movement_plans = await self._create_movement_plans(cities, constraints)
         day_skeletons = self._build_day_skeletons(night_allocation, lodging_plans, movement_plans, constraints, activity_catalog)
         total_transit_hours = sum(m.duration_hours for m in movement_plans)
@@ -81,16 +82,17 @@ class LogisticsAgent:
         return allocation
 
     async def _create_lodging_plans(self, cities: List[str], night_allocation: Dict[str, int],
-                                     constraints: TravelConstraints, activity_catalog: Optional[any]) -> List[LodgingPlan]:
+                                     constraints: TravelConstraints, activity_catalog: Optional[any],
+                                     neighborhoods_map: Optional[Dict[str, List[str]]] = None) -> List[LodgingPlan]:
         """Create lodging plans, using LLM for neighborhood suggestions."""
         plans = []
 
-        neighborhoods_map = {}
-        if self.llm_client:
+        if neighborhoods_map is None and self.llm_client:
             try:
                 neighborhoods_map = await self._llm_get_neighborhoods(cities, constraints)
             except Exception as e:
                 print(f"LLM neighborhood generation failed: {e}")
+        neighborhoods_map = neighborhoods_map or {}
 
         for city in cities:
             nights = night_allocation.get(city, 1)
@@ -133,7 +135,7 @@ Budget: {constraints.budget_total} {constraints.currency} for {constraints.durat
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=300
+            max_tokens=1200
         )
 
         content = self._extract_json_content(content)
@@ -212,7 +214,7 @@ Budget: {constraints.budget_total} {constraints.currency}"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=600
+            max_tokens=1500
         )
 
         content = self._extract_json_content(content)

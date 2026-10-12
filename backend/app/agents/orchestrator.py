@@ -411,15 +411,22 @@ class OrchestratorAgent:
         from ..models import LogisticsOutput, ActivityCatalog, Activity, BudgetBreakdown, BudgetCategory
         
         all_activities = []
-        all_categories = []
         all_movement_plans = []
         all_lodging_plans = []
         all_day_skeletons = []
-        grand_total = 0.0
         total_transit = 0.0
         per_city = {}
         neighborhood_notes = {}
-        
+
+        # One trip-wide neighborhoods call instead of one per region (Groq free tier is 8k TPM)
+        region_cities = [r.base_location for r in trip_structure.regions]
+        neighborhoods_map = {}
+        if self.logistics_agent.llm_client:
+            try:
+                neighborhoods_map = await self.logistics_agent._llm_get_neighborhoods(region_cities, constraints)
+            except Exception as e:
+                print(f"LLM neighborhood generation failed: {e}")
+
         for region in trip_structure.regions:
             print(f"  Processing region: {region.name} ({region.days} days)")
             
@@ -458,21 +465,10 @@ class OrchestratorAgent:
                 all_activities.extend(region_catalog.activities)
                 per_city.update(region_catalog.per_city)
             
-            # Run budget for this region
-            try:
-                region_budget = await asyncio.wait_for(
-                    self.budget_agent.analyze(region_constraints),
-                    timeout=timeout_seconds
-                )
-                all_categories.extend(region_budget.categories)
-                grand_total += region_budget.grand_total
-            except Exception as e:
-                print(f"  Region {region.name} budget failed: {e}")
-            
             # Run logistics for this region
             try:
                 region_logistics = await asyncio.wait_for(
-                    self.logistics_agent.plan(region_constraints, region_catalog),
+                    self.logistics_agent.plan(region_constraints, region_catalog, neighborhoods_map),
                     timeout=timeout_seconds
                 )
                 all_lodging_plans.extend(region_logistics.lodging_plans)
@@ -501,14 +497,19 @@ class OrchestratorAgent:
             logistics_summary=f"Route: {' → '.join(trip_structure.route)}"
         )
         
-        budget_breakdown = BudgetBreakdown(
-            categories=all_categories,
-            grand_total=round(grand_total, 2),
-            currency=constraints.currency,
-            within_budget=grand_total <= constraints.budget_total,
-            remaining_buffer=round(max(0, constraints.budget_total - grand_total), 2)
-        )
-        
+        budget_constraints = constraints.model_copy(update={"cities": region_cities})
+        try:
+            budget_breakdown = await asyncio.wait_for(
+                self.budget_agent.analyze(budget_constraints),
+                timeout=timeout_seconds
+            )
+        except Exception as e:
+            print(f"  Trip budget failed: {e}")
+            budget_breakdown = BudgetBreakdown(
+                categories=[], grand_total=0.0, currency=constraints.currency,
+                within_budget=True, remaining_buffer=constraints.budget_total
+            )
+
         return activity_catalog, logistics_output, budget_breakdown
     
     async def _run_logistics_with_timeout(self, constraints, activity_catalog, timeout_seconds, trace_id):
@@ -944,7 +945,7 @@ Preferences: {', '.join(constraints.preferences) if constraints.preferences else
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=1500
+                max_tokens=3000
             )
             content = self._extract_json(content)
             data = _json.loads(content)

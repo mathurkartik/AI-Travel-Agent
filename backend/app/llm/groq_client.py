@@ -5,6 +5,7 @@ Optimized for 100k tokens/day limit.
 
 import asyncio
 import json
+import re
 import time
 from typing import Optional, Any, Dict, Type, TypeVar
 from functools import lru_cache
@@ -316,7 +317,7 @@ TRIP TYPE DETECTION:
         max_tokens: int = 900,
         temperature: Optional[float] = None,
         response_format: Optional[dict] = None,
-        max_retries: int = 3,
+        max_retries: int = 6,
     ) -> str:
         """Chat completion with automatic retry on 429 rate limit errors."""
         if not self._client:
@@ -331,14 +332,20 @@ TRIP TYPE DETECTION:
                     "temperature": temperature or self.temperature,
                     "max_tokens": max_tokens,
                 }
-                response = self._client.chat.completions.create(**kwargs)
+                # gpt-oss spends hidden reasoning tokens that count against the 8k TPM free-tier limit
+                if "gpt-oss" in self.model:
+                    kwargs["reasoning_effort"] = "low"
+                response = await asyncio.to_thread(self._client.chat.completions.create, **kwargs)
                 if response.usage:
                     self._record_usage(response.usage.prompt_tokens, response.usage.completion_tokens)
                 return response.choices[0].message.content
             except Exception as e:
-                if "429" in str(e) or "rate_limit" in str(e):
-                    wait = 5 * (attempt + 1)
-                    print(f"Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries})")
+                msg = str(e)
+                if "429" in msg or "rate_limit" in msg:
+                    match = re.search(r"try again in (?:(\d+)m)?([\d.]+)s", msg)
+                    wait = (int(match.group(1) or 0) * 60 + float(match.group(2)) + 1) if match else 5 * (attempt + 1)
+                    wait = min(wait, 30)
+                    print(f"Rate limited, waiting {wait:.1f}s (attempt {attempt + 1}/{max_retries})")
                     await asyncio.sleep(wait)
                     continue
                 raise
