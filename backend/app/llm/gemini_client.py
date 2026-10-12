@@ -1,5 +1,5 @@
 """
-Gemini LLM Client using the google-genai SDK (successor to google-generativeai).
+Gemini LLM Client using the google-genai SDK.
 Same interface as GroqClient: chat_with_retry, extract_constraints, generate_with_schema.
 """
 
@@ -89,10 +89,42 @@ class GeminiClient:
         if self.enable_tracking and self._tracker:
             self._tracker.record_usage(prompt_tokens, completion_tokens, self.model)
 
+    def _get_response_text(self, response) -> str:
+        """Robustly extract text from a Gemini response object."""
+        # Try .text first (works when response has exactly one text part)
+        try:
+            if response.text:
+                return response.text
+        except (AttributeError, ValueError):
+            pass
+
+        # Fall back to manual candidate extraction
+        if hasattr(response, 'candidates') and response.candidates:
+            candidate = response.candidates[0]
+            if hasattr(candidate, 'content') and candidate.content:
+                parts = getattr(candidate.content, 'parts', None)
+                if parts:
+                    for part in parts:
+                        text = getattr(part, 'text', None)
+                        if text:
+                            return text
+
+        # Check if blocked by safety
+        if hasattr(response, 'prompt_feedback'):
+            feedback = response.prompt_feedback
+            block_reason = getattr(feedback, 'block_reason', None)
+            if block_reason:
+                raise RuntimeError(f"Gemini blocked the request: {block_reason}")
+
+        raise RuntimeError(
+            f"Gemini returned no text. "
+            f"Candidates: {len(response.candidates) if hasattr(response, 'candidates') and response.candidates else 0}"
+        )
+
     def _extract_json(self, text: str) -> str:
         """Extract JSON from Gemini response, stripping markdown fences if present."""
         if not text:
-            raise RuntimeError("Gemini returned empty response (possibly blocked by safety filters)")
+            raise RuntimeError("Empty text passed to JSON extraction")
         text = text.strip()
         if text.startswith("```"):
             lines = text.split("\n")
@@ -107,17 +139,17 @@ class GeminiClient:
 
     def _generate_sync(self, prompt: str, max_tokens: int, temperature: float, json_mode: bool = False):
         """Synchronous call to Gemini API via google-genai SDK."""
-        config = {
+        config_kwargs = {
             "temperature": temperature,
             "max_output_tokens": max_tokens,
         }
         if json_mode:
-            config["response_mime_type"] = "application/json"
+            config_kwargs["response_mime_type"] = "application/json"
 
         return self._client.models.generate_content(
             model=self.model,
             contents=prompt,
-            config=config,
+            config=genai_types.GenerateContentConfig(**config_kwargs),
         )
 
     async def extract_constraints(
@@ -169,26 +201,18 @@ CRITICAL EXTRACTION RULES (STRICT - DO NOT INVENT MISSING DATA):
 - Duration: Extract duration in days (e.g. 1 week = 7 days). If user does NOT mention duration or days, set duration_days to null.
 - Budget:
   * If a numeric budget is stated ($2000, 50000 INR, etc.), extract the number into budget_total and the 3-letter currency into currency.
-  * If user specifies a budget style without an exact number (e.g., "cheap", "backpacking", "budget trip" -> "budget"; "moderate", "mid-range", "reasonable" -> "moderate"; "luxury", "5-star", "lavish" -> "luxury"), set budget_tier to "budget", "moderate", or "luxury".
+  * If user specifies a budget style without an exact number, set budget_tier to "budget", "moderate", or "luxury".
   * If neither amount nor tier is mentioned, set budget_total to null and budget_tier to null.
   * DO NOT guess or invent default budget or duration values if omitted.
 
 TRIP TYPE DETECTION:
-- ROAD TRIP countries (Iceland, Norway, New Zealand, Scotland, Ireland, Portugal coast, South Africa Garden Route, Australia outback):
-  Set is_road_trip=true. Generate 4-8 ROUTE STOPS (regions/towns along the route), NOT just the capital.
-  Example Iceland: cities=["Reykjavik","Vik","Hofn","Egilsstadir","Akureyri","Snaefellsnes"]
-  Example Norway: cities=["Oslo","Bergen","Geiranger","Alesund","Tromso"]
-  Example New Zealand: cities=["Auckland","Rotorua","Wellington","Queenstown","Milford Sound"]
-
-- CITY TRIP destinations (Paris, Tokyo, NYC, Dubai, Singapore):
-  Set is_road_trip=false. Use 1-3 cities as appropriate.
-
+- ROAD TRIP countries (Iceland, Norway, New Zealand, Scotland, Ireland):
+  Set is_road_trip=true. Generate 4-8 ROUTE STOPS.
+- CITY TRIP destinations (Paris, Tokyo, NYC, Dubai):
+  Set is_road_trip=false. Use 1-3 cities.
 - MULTI-CITY countries (Japan, Italy, Spain):
   Set is_road_trip=false. Generate 2-4 key cities.
-  Example Japan: cities=["Tokyo","Kyoto","Osaka"]
-
-- Preferences: include nature, adventure, scenic drives, temples, food etc. based on request.
-- For road trips: add "self-drive", "scenic routes", "nature" to preferences automatically.
+- For road trips: add "self-drive", "scenic routes", "nature" to preferences.
 """
 
         try:
@@ -204,7 +228,7 @@ TRIP TYPE DETECTION:
                     getattr(response.usage_metadata, 'candidates_token_count', 0) or 0,
                 )
 
-            content = self._extract_json(response.text)
+            content = self._extract_json(self._get_response_text(response))
             data = json.loads(content)
             constraints = TravelConstraints.model_validate(data)
 
@@ -256,7 +280,7 @@ TRIP TYPE DETECTION:
                     getattr(response.usage_metadata, 'candidates_token_count', 0) or 0,
                 )
 
-            content = self._extract_json(response.text)
+            content = self._extract_json(self._get_response_text(response))
             data = json.loads(content)
             result = output_schema.model_validate(data)
 
@@ -307,16 +331,14 @@ TRIP TYPE DETECTION:
                         getattr(response.usage_metadata, 'candidates_token_count', 0) or 0,
                     )
 
-                text = response.text
-                if not text:
-                    raise RuntimeError("Gemini returned empty response (possibly blocked by safety filters)")
+                text = self._get_response_text(response)
                 if json_mode:
                     text = self._extract_json(text)
                 return text
 
             except Exception as e:
                 err_str = str(e)
-                if "429" in err_str or "rate" in err_str.lower() or "quota" in err_str.lower():
+                if "429" in err_str or "rate" in err_str.lower() or "quota" in err_str.lower() or "503" in err_str:
                     wait = 5 * (attempt + 1)
                     print(f"Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries})")
                     await asyncio.sleep(wait)
