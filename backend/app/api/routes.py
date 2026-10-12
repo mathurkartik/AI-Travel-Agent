@@ -79,11 +79,11 @@ async def create_plan(request: Request, plan_request: PlanRequest):
     # Phase 5: Full orchestration pipeline
     try:
         from ..agents import OrchestratorAgent
-        from ..llm import get_groq_client, TokenBudgetExceeded
-        
-        # Initialize orchestrator with Groq client
-        groq_client = get_groq_client()
-        orchestrator = OrchestratorAgent(llm_client=groq_client)
+        from ..llm import get_llm_client, TokenBudgetExceeded
+
+        # Initialize orchestrator with configured LLM client (Gemini or Groq)
+        llm_client = get_llm_client()
+        orchestrator = OrchestratorAgent(llm_client=llm_client)
         
         # Run full pipeline: extract → validate 3 pillars → parallel agents → merge → final
         final_itinerary = await orchestrator.create_plan(plan_request.request, trace_id=trace_id)

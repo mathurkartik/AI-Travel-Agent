@@ -81,7 +81,11 @@ async def health_check():
         status="healthy",
         tokens=token_status,
         llm_provider=settings.llm_provider,
-        llm_available=bool(settings.groq_api_key) if settings.llm_provider == "groq" else False
+        llm_available=(
+            bool(settings.gemini_api_key) if settings.llm_provider == "gemini"
+            else bool(settings.groq_api_key) if settings.llm_provider == "groq"
+            else False
+        )
     )
 
 
