@@ -91,6 +91,8 @@ class GeminiClient:
 
     def _extract_json(self, text: str) -> str:
         """Extract JSON from Gemini response, stripping markdown fences if present."""
+        if not text:
+            raise RuntimeError("Gemini returned empty response (possibly blocked by safety filters)")
         text = text.strip()
         if text.startswith("```"):
             lines = text.split("\n")
@@ -306,6 +308,8 @@ TRIP TYPE DETECTION:
                     )
 
                 text = response.text
+                if not text:
+                    raise RuntimeError("Gemini returned empty response (possibly blocked by safety filters)")
                 if json_mode:
                     text = self._extract_json(text)
                 return text

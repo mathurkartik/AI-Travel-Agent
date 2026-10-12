@@ -397,15 +397,14 @@ async def debug_llm_test():
         client = get_llm_client()
         result = await client.chat_with_retry(
             messages=[
-                {"role": "system", "content": "Reply with exactly: {\"status\": \"ok\"}"},
-                {"role": "user", "content": "ping"}
+                {"role": "user", "content": "Say hello in one sentence."}
             ],
             max_tokens=50,
-            response_format={"type": "json_object"}
         )
-        return {"status": "ok", "response": result, "client": type(client).__name__}
+        return {"status": "ok", "response": result, "client": type(client).__name__, "model": client.model}
     except Exception as e:
-        return {"status": "error", "error": str(e), "type": type(e).__name__}
+        import traceback
+        return {"status": "error", "error": str(e), "type": type(e).__name__, "trace": traceback.format_exc()[-500:]}
 
 
 @router.post("/tokens/reset-cache", tags=["Monitoring"])
