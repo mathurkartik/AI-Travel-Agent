@@ -89,7 +89,7 @@ Include variety: landmarks, food spots, cultural sites, nature, neighborhoods.""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=900,
+            max_tokens=600,
             response_format={"type": "json_object"}
         )
 

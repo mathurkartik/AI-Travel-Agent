@@ -319,8 +319,10 @@ class OrchestratorAgent:
         return final_itinerary
     
     async def _run_agents_flat(self, constraints, timeout_seconds, trace_id):
-        """Original flat pipeline — runs all agents once on full constraints."""
-        # Destination
+        """Flat pipeline — runs Destination first, then Logistics + Budget in parallel (Architecture §4, §9)."""
+        from ..models import ActivityCatalog, LogisticsOutput, BudgetBreakdown
+
+        # Step 1: Destination first (Logistics needs the catalog)
         activity_catalog = None
         try:
             activity_catalog = await asyncio.wait_for(
@@ -331,7 +333,6 @@ class OrchestratorAgent:
             ObservabilityLogger.log_partial_failure(
                 trace_id, "destination_agent", "use_static_catalog", str(e)[:100]
             )
-            from ..models import ActivityCatalog
             all_acts = []
             per_city_map = {}
             for city in constraints.cities:
@@ -339,26 +340,31 @@ class OrchestratorAgent:
                 per_city_map[city] = [a.id for a in city_acts]
                 all_acts.extend(city_acts)
             activity_catalog = ActivityCatalog(activities=all_acts, per_city=per_city_map, neighborhood_notes={})
-        
-        # Logistics then Budget (sequential to avoid Groq OTPM rate limits)
-        try:
-            logistics_output = await self._run_logistics_with_timeout(constraints, activity_catalog, timeout_seconds, trace_id)
-        except Exception:
-            from ..models import LogisticsOutput
-            logistics_output = LogisticsOutput(
-                lodging_plans=[], movement_plans=[], day_skeletons=[],
-                total_estimated_transit_hours=0.0,
-                logistics_summary="Fallback - logistics unavailable"
-            )
-        try:
-            budget_breakdown = await self._run_budget_with_timeout(constraints, timeout_seconds, trace_id)
-        except Exception:
-            from ..models import BudgetBreakdown
-            budget_breakdown = BudgetBreakdown(
-                categories=[], grand_total=0.0, currency=constraints.currency,
-                within_budget=True, remaining_buffer=constraints.budget_total
-            )
-        
+
+        # Step 2: Logistics + Budget in parallel (Architecture §4: parallel specialists)
+        async def run_logistics():
+            try:
+                return await self._run_logistics_with_timeout(constraints, activity_catalog, timeout_seconds, trace_id)
+            except Exception:
+                return LogisticsOutput(
+                    lodging_plans=[], movement_plans=[], day_skeletons=[],
+                    total_estimated_transit_hours=0.0,
+                    logistics_summary="Fallback - logistics unavailable"
+                )
+
+        async def run_budget():
+            try:
+                return await self._run_budget_with_timeout(constraints, timeout_seconds, trace_id)
+            except Exception:
+                return BudgetBreakdown(
+                    categories=[], grand_total=0.0, currency=constraints.currency,
+                    within_budget=True, remaining_buffer=constraints.budget_total
+                )
+
+        logistics_output, budget_breakdown = await asyncio.gather(
+            run_logistics(), run_budget()
+        )
+
         return activity_catalog, logistics_output, budget_breakdown
     
     async def _run_agents_per_region(self, constraints, trip_structure, timeout_seconds, trace_id):
@@ -830,7 +836,7 @@ Days breakdown: {', '.join(f'Day {d.day_number}: {d.city}' for d in draft.days)}
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=900,
+                max_tokens=600,
                 response_format={"type": "json_object"}
             )
             data = _json.loads(content)

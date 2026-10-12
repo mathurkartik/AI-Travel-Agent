@@ -297,7 +297,7 @@ TRIP TYPE DETECTION:
         """Chat completion with automatic retry on 429 rate limit errors."""
         if not self._client:
             raise RuntimeError("Groq client not initialized")
-        max_tokens = min(max_tokens, 900)
+        max_tokens = min(max_tokens, 600)
         for attempt in range(max_retries):
             try:
                 kwargs = {
@@ -314,7 +314,7 @@ TRIP TYPE DETECTION:
                 return response.choices[0].message.content
             except Exception as e:
                 if "429" in str(e) or "rate_limit" in str(e):
-                    wait = 15 * (attempt + 1)
+                    wait = 5 * (attempt + 1)
                     print(f"Rate limited, waiting {wait}s (attempt {attempt + 1}/{max_retries})")
                     await asyncio.sleep(wait)
                     continue

@@ -118,7 +118,7 @@ Budget: {constraints.budget_total} {constraints.currency} for {constraints.durat
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=500,
+            max_tokens=300,
             response_format={"type": "json_object"}
         )
 
