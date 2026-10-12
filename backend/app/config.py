@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # Groq Configuration (Default — worked reliably for 7 months)
     groq_api_key: str | None = None
-    groq_model: str = "llama-3.3-70b-versatile"
+    groq_model: str = "openai/gpt-oss-120b"
     groq_max_tokens_per_request: int = 4000
 
     # Gemini Configuration (Fallback)
