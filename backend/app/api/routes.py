@@ -391,17 +391,40 @@ async def get_token_status():
 
 @router.get("/debug/llm-test", tags=["Monitoring"])
 async def debug_llm_test():
-    """Quick smoke test of the configured LLM client."""
+    """Quick smoke test of the configured LLM client — raw response inspection."""
     try:
         from ..llm import get_llm_client
+        import asyncio
         client = get_llm_client()
-        result = await client.chat_with_retry(
-            messages=[
-                {"role": "user", "content": "Say hello in one sentence."}
-            ],
-            max_tokens=50,
+        response = await asyncio.to_thread(
+            client._generate_sync, "Say hello in one sentence.", 50, 0.1, False
         )
-        return {"status": "ok", "response": result, "client": type(client).__name__, "model": client.model}
+        raw_info = {
+            "has_text": hasattr(response, 'text'),
+            "text_value": None,
+            "text_type": None,
+            "has_candidates": hasattr(response, 'candidates'),
+            "candidates_len": len(response.candidates) if hasattr(response, 'candidates') and response.candidates else 0,
+            "response_type": type(response).__name__,
+            "response_dir": [a for a in dir(response) if not a.startswith('_')][:20],
+        }
+        try:
+            raw_info["text_value"] = response.text
+            raw_info["text_type"] = type(response.text).__name__
+        except Exception as te:
+            raw_info["text_error"] = str(te)
+        if hasattr(response, 'candidates') and response.candidates:
+            c = response.candidates[0]
+            raw_info["candidate_dir"] = [a for a in dir(c) if not a.startswith('_')][:20]
+            if hasattr(c, 'content') and c.content and hasattr(c.content, 'parts'):
+                raw_info["parts_len"] = len(c.content.parts)
+                if c.content.parts:
+                    p = c.content.parts[0]
+                    raw_info["part_text"] = getattr(p, 'text', None)
+                    raw_info["part_dir"] = [a for a in dir(p) if not a.startswith('_')][:15]
+            if hasattr(c, 'finish_reason'):
+                raw_info["finish_reason"] = str(c.finish_reason)
+        return {"status": "debug", "model": client.model, "raw": raw_info}
     except Exception as e:
         import traceback
         return {"status": "error", "error": str(e), "type": type(e).__name__, "trace": traceback.format_exc()[-500:]}
