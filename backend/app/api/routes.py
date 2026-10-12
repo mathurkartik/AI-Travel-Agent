@@ -389,6 +389,25 @@ async def get_token_status():
     }
 
 
+@router.get("/debug/llm-test", tags=["Monitoring"])
+async def debug_llm_test():
+    """Quick smoke test of the configured LLM client."""
+    try:
+        from ..llm import get_llm_client
+        client = get_llm_client()
+        result = await client.chat_with_retry(
+            messages=[
+                {"role": "system", "content": "Reply with exactly: {\"status\": \"ok\"}"},
+                {"role": "user", "content": "ping"}
+            ],
+            max_tokens=50,
+            response_format={"type": "json_object"}
+        )
+        return {"status": "ok", "response": result, "client": type(client).__name__}
+    except Exception as e:
+        return {"status": "error", "error": str(e), "type": type(e).__name__}
+
+
 @router.post("/tokens/reset-cache", tags=["Monitoring"])
 async def reset_response_cache():
     """
