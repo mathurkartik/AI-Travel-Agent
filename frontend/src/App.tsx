@@ -643,11 +643,18 @@ function App() {
                     </div>
                     <div className="day-header">
                       <span className="day-badge">Day {day.day_number}</span>
+                      {day.mood && <span className="day-mood">{day.mood}</span>}
                       <span className="day-title">{day.day_summary || `Explore ${day.city}`}</span>
                       {day.city && (
                         <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#6b7280' }}>📍 {day.city}</span>
                       )}
                     </div>
+                    {day.highlight && (
+                      <div className="day-highlight">{day.highlight}</div>
+                    )}
+                    {day.day_narrative && (
+                      <div className="day-narrative">{day.day_narrative}</div>
+                    )}
                     <div className="activities-grid">
                       {((day as any).items as any[]).map((item: any, i: number) => (
                         <div key={i} className="activity-card">

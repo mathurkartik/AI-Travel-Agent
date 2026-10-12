@@ -84,10 +84,18 @@ Budget level: {constraints.budget_total} {constraints.currency}"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=900,
-            response_format={"type": "json_object"}
+            max_tokens=900
         )
 
+        content = content.strip()
+        if content.startswith("```"):
+            lines = content.split("\n")
+            content = "\n".join(lines[1:])
+            if "```" in content:
+                content = content[:content.rfind("```")]
+        brace = content.find("{")
+        if brace > 0:
+            content = content[brace:]
         data = json.loads(content)
 
         regions = []

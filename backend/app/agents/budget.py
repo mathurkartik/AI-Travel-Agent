@@ -27,6 +27,20 @@ class BudgetAgent:
         self.tool_router = tool_router
         self.llm_client = llm_client
 
+    @staticmethod
+    def _extract_json_content(text: str) -> str:
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:])
+            if "```" in text:
+                text = text[:text.rfind("```")]
+            text = text.strip()
+        brace = text.find("{")
+        if brace > 0:
+            text = text[brace:]
+        return text
+
     async def analyze(self, constraints: TravelConstraints) -> BudgetBreakdown:
         """Generate budget breakdown from constraints."""
         if self.llm_client:
@@ -82,10 +96,10 @@ Rules:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=600,
-            response_format={"type": "json_object"}
+            max_tokens=1500
         )
 
+        content = self._extract_json_content(content)
         data = json.loads(content)
 
         categories = []

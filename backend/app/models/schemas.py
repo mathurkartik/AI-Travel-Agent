@@ -161,9 +161,10 @@ class Activity(BaseModel):
     cost_band: CostBand
     must_do: bool = Field(default=False, description="High priority item")
     rationale: str = Field(..., min_length=1, max_length=500, description="Why this matches preferences")
+    description: Optional[str] = Field(default=None, max_length=300, description="Evocative one-liner about the experience")
     address: Optional[str] = Field(default=None, max_length=300)
-    best_time: Optional[str] = Field(default=None, max_length=50)  # e.g., "morning", "evening"
-    less_crowded_alternative: Optional[str] = Field(default=None, max_length=50)  # ID of alternative activity
+    best_time: Optional[str] = Field(default=None, max_length=50)
+    less_crowded_alternative: Optional[str] = Field(default=None, max_length=50)
     tags: List[str] = Field(default_factory=list, max_length=20)
     
     @field_validator("id")
@@ -419,6 +420,9 @@ class DayItinerary(BaseModel):
     day_summary: str = Field(..., min_length=1, max_length=500)
     day_cost: float = Field(..., ge=0)
     lodging_area: Optional[str] = Field(default=None, max_length=300)
+    mood: Optional[str] = Field(default=None, max_length=30, description="One-word day mood e.g. Wonder, Adventure, Ease")
+    highlight: Optional[str] = Field(default=None, max_length=100, description="Standout moment of the day")
+    day_narrative: Optional[str] = Field(default=None, max_length=500, description="2-3 sentence narrative about today's experience")
     
     @field_validator("items")
     @classmethod

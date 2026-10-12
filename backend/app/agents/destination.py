@@ -53,47 +53,65 @@ class DestinationAgent:
 
     async def _llm_generate_activities(self, city: str, constraints: TravelConstraints) -> List[Activity]:
         """Use LLM to generate specific activity names with details."""
-        system_prompt = f"""You are a travel expert for {city}. Generate specific, real activities based on traveler preferences.
+        days_in_city = max(2, constraints.duration_days // max(1, len(constraints.cities)))
+        non_food_count = min(12, max(6, days_in_city * 2))
+        food_count = min(6, max(3, days_in_city))
+        activity_count = non_food_count + food_count
 
-Respond with valid JSON object with an "activities" key containing an array. Each activity:
-{{
-  "name": "Specific real place name (e.g., 'Senso-ji Temple', not 'Morning activity')",
-  "type": "temple|food|museum|nature|shopping|entertainment|transport|other",
-  "estimated_duration_hours": number (0.5-4.0),
-  "crowd_level": "low|medium|high",
-  "cost_band": "budget|moderate|expensive|luxury",
-  "must_do": boolean,
-  "rationale": "Brief reason (under 100 chars)",
-  "best_time": "When to visit",
-  "address": "Area name",
-  "tags": ["1-2 keywords"]
-}}
+        system_prompt = f"""You are an expert local guide for {city}. Generate exactly {activity_count} activities.
 
-Rules:
-- Use REAL, specific place names only
-- Include crowd avoidance timing if user hates crowds
-- Suggest specific neighborhoods for food/activities
-- Duration should be realistic (minimum 0.5 hours)
-- Generate exactly 4-5 activities (keep it concise)"""
+Respond ONLY with valid JSON: {{"activities": [...]}}
 
-        user_prompt = f"""Generate specific activities for {city} based on:
-- Preferences: {', '.join(constraints.preferences) if constraints.preferences else 'general sightseeing'}
-- Avoidances: {', '.join(constraints.avoidances) if constraints.avoidances else 'none'}
-- Duration: {constraints.duration_days} days total trip
-- Budget: {constraints.budget_total} {constraints.currency}
+Each activity: {{"name": "Real place name", "description": "One evocative sentence", "type": "temple|food|museum|nature|shopping|entertainment|other", "cost_band": "budget|moderate|expensive", "address": "Area/district"}}
 
-Include variety: landmarks, food spots, cultural sites, nature, neighborhoods."""
+Requirements:
+- {non_food_count} non-food (museums, landmarks, churches, parks, viewpoints, neighborhoods)
+- {food_count} food (restaurants, bistros, bakeries, cafes — each DIFFERENT)
+- ONLY real specific names, no generic labels
+- All names unique. Mix iconic spots and hidden gems"""
+
+        user_prompt = f"""Generate {activity_count} unique activities for {days_in_city} days in {city}:
+Likes: {', '.join(constraints.preferences) if constraints.preferences else 'sightseeing, food, culture'}
+Avoid: {', '.join(constraints.avoidances) if constraints.avoidances else 'none'}
+Budget: {constraints.budget_total} {constraints.currency}"""
 
         content = await self.llm_client.chat_with_retry(
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=600,
-            response_format={"type": "json_object"}
+            max_tokens=3500
         )
 
-        data = json.loads(content)
+        content = content.strip()
+        if content.startswith("```"):
+            lines = content.split("\n")
+            content = "\n".join(lines[1:])
+            if "```" in content:
+                content = content[:content.rfind("```")]
+        brace = content.find("{")
+        if brace > 0:
+            content = content[brace:]
+
+        try:
+            data = json.loads(content)
+        except json.JSONDecodeError:
+            # Try to repair truncated JSON by closing open brackets
+            repaired = content.rstrip().rstrip(",")
+            # Find the last complete object (ends with })
+            last_close = repaired.rfind("}")
+            if last_close > 0:
+                repaired = repaired[:last_close + 1]
+                if '"activities"' in repaired:
+                    repaired += "]}"
+                elif repaired.startswith("["):
+                    repaired += "]"
+                try:
+                    data = json.loads(repaired)
+                except json.JSONDecodeError:
+                    raise
+            else:
+                raise
 
         if isinstance(data, dict) and "activities" in data:
             activities_data = data["activities"]
@@ -117,7 +135,8 @@ Include variety: landmarks, food spots, cultural sites, nature, neighborhoods.""
         activities = []
         for i, item in enumerate(activities_data):
             name = str(item.get("name", ""))[:100]
-            rationale = str(item.get("rationale", ""))[:200]
+            rationale = str(item.get("rationale", "") or item.get("description", "") or "Worth visiting")[:200]
+            description = str(item.get("description", ""))[:300] if item.get("description") else None
             best_time = str(item.get("best_time", ""))[:50]
             address = str(item.get("address", ""))[:100]
 
@@ -134,6 +153,7 @@ Include variety: landmarks, food spots, cultural sites, nature, neighborhoods.""
                 crowd_level=crowd_mapping.get(item.get("crowd_level"), CrowdLevel.MEDIUM),
                 must_do=bool(item.get("must_do", False)),
                 rationale=rationale,
+                description=description,
                 address=address,
                 best_time=best_time,
                 tags=item.get("tags", [])[:5]

@@ -666,6 +666,32 @@ body {
   color: var(--text-dark);
 }
 
+.day-mood {
+  background: #f0fdf4;
+  color: #15803d;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.day-highlight {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--primary-teal);
+  margin-bottom: 6px;
+}
+
+.day-narrative {
+  font-size: 13px;
+  color: var(--text-light);
+  line-height: 1.6;
+  margin-bottom: 12px;
+  font-style: italic;
+}
+
 .day-timeline {
   position: absolute;
   left: 8px;

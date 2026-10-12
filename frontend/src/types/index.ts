@@ -146,6 +146,9 @@ export interface DayItinerary {
   day_summary: string;
   day_cost: number;
   lodging_area?: string;
+  mood?: string;
+  highlight?: string;
+  day_narrative?: string;
 }
 
 export interface FinalItinerary {

@@ -44,6 +44,42 @@ class OrchestratorAgent:
     - Caches responses to reduce consumption
     """
     
+    @staticmethod
+    def _extract_json(text: str) -> str:
+        """Extract JSON from LLM output that may have preamble or markdown fences."""
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:])
+            if "```" in text:
+                text = text[:text.rfind("```")]
+            text = text.strip()
+        brace = text.find("{")
+        bracket = text.find("[")
+        if brace == -1 and bracket == -1:
+            return text
+        start = brace if bracket == -1 else (bracket if brace == -1 else min(brace, bracket))
+        text = text[start:]
+        # Try to repair truncated JSON
+        import json
+        try:
+            json.loads(text)
+            return text
+        except json.JSONDecodeError:
+            repaired = text.rstrip().rstrip(",")
+            last_close = repaired.rfind("}")
+            if last_close > 0:
+                repaired = repaired[:last_close + 1]
+                open_brackets = repaired.count("[") - repaired.count("]")
+                open_braces = repaired.count("{") - repaired.count("}")
+                repaired += "]" * open_brackets + "}" * open_braces
+                try:
+                    json.loads(repaired)
+                    return repaired
+                except json.JSONDecodeError:
+                    pass
+            return text
+
     def __init__(self, llm_client=None):
         self.llm_client = llm_client
         self._settings = get_settings()
@@ -292,7 +328,10 @@ class OrchestratorAgent:
         
         # Step 6: Generate insights (Strategic + Budget Reality Check)
         insights = await self._generate_insights(constraints, draft)
-        
+
+        # Step 6b: Enrich days with mood, highlight, and narrative
+        await self._enrich_day_narratives(constraints, draft)
+
         # Step 7: Create FinalItinerary from Draft with Review status, insights, and disclaimer
         final_itinerary = self._draft_to_final(
             draft=draft,
@@ -574,27 +613,29 @@ class OrchestratorAgent:
                     day_items.append(item)
                     continue
                 
-                # Try to match slot type with available activities
-                activity_ref = self._find_activity_for_slot(
-                    slot.activity_type,
-                    skeleton.city,
-                    activity_catalog,
-                    activity_by_id,
-                    used_activity_ids,
-                    activity_use_count
-                )
+                # Try to match activity by name from slot notes first
+                activity_ref = None
+                if slot.notes:
+                    note_name = slot.notes.split(".")[0].strip()
+                    for aid, act in activity_by_id.items():
+                        if act.city == skeleton.city and act.name == note_name:
+                            activity_ref = aid
+                            break
+
+                if not activity_ref:
+                    activity_ref = self._find_activity_for_slot(
+                        slot.activity_type, skeleton.city, activity_catalog,
+                        activity_by_id, used_activity_ids, activity_use_count
+                    )
+
                 if activity_ref:
                     used_activity_ids.add(activity_ref)
                     activity_use_count[activity_ref] = activity_use_count.get(activity_ref, 0) + 1
-                    
-                    # Get cost estimate if we found an activity
-                    if activity_ref and activity_ref in activity_by_id:
+                    if activity_ref in activity_by_id:
                         activity = activity_by_id[activity_ref]
-                        # Estimate cost based on cost band
                         cost_estimate = self._estimate_activity_cost(activity)
-                
-                # Get activity details if available, otherwise use slot notes
-                activity_name = slot.notes  # Use slot description instead of generic "Free time"
+
+                activity_name = slot.notes
                 activity_type = ActivityType.OTHER
                 if activity_ref and activity_ref in activity_by_id:
                     activity = activity_by_id[activity_ref]
@@ -663,12 +704,12 @@ class OrchestratorAgent:
         if not city_data:
             return None
 
-        available_ids = [aid for aid in city_data if aid not in used_ids]
-        available_ids.sort(key=lambda aid: use_count.get(aid, 0))
+        available_ids = sorted(city_data, key=lambda aid: use_count.get(aid, 0))
 
         type_preferences = {
             "morning": ["temple", "museum", "nature"],
             "afternoon": ["temple", "nature", "shopping", "entertainment"],
+            "evening": ["nature", "entertainment", "shopping", "other"],
             "lunch": ["food"],
             "dinner": ["food"],
         }
@@ -702,22 +743,40 @@ class OrchestratorAgent:
         items: List[DayItineraryItem],
         activity_by_id: Dict[str, Any]
     ) -> str:
-        """Generate human-readable summary for a day."""
-        # Check if this is a travel day (has travel slots)
+        """Generate a thematic summary for a day."""
         travel_slots = [s for s in skeleton.slots if s.activity_type == "travel"]
         if travel_slots:
-            return f"Travel day: {skeleton.pacing_notes or 'Travel between cities'}"
-        
-        # Get activity names
+            return skeleton.pacing_notes or "Travel between cities"
+
         activity_names = []
+        activity_types = set()
         for item in items:
             if item.activity_id and item.activity_id in activity_by_id:
                 activity = activity_by_id[item.activity_id]
                 activity_names.append(activity.name)
-        
-        if activity_names:
-            return f"Explore {skeleton.city}: {', '.join(activity_names[:2])}"
-        return f"Day in {skeleton.city}"
+                activity_types.add(activity.type.value)
+
+        if not activity_names:
+            return f"Day in {skeleton.city}"
+
+        theme_map = {
+            frozenset({"temple", "museum"}): "Heritage & Culture",
+            frozenset({"nature"}): "Nature & Scenery",
+            frozenset({"food"}): "Culinary Exploration",
+            frozenset({"shopping", "entertainment"}): "Markets & Entertainment",
+        }
+        theme = None
+        for types, label in theme_map.items():
+            if types & activity_types:
+                theme = label
+                break
+
+        if len(activity_names) == 1:
+            return f"{activity_names[0]}"
+        highlight = activity_names[0]
+        if theme:
+            return f"{theme}: {highlight} & more"
+        return f"{highlight} & {activity_names[1]}"
     
     def _draft_to_final(
         self,
@@ -836,9 +895,9 @@ Days breakdown: {', '.join(f'Day {d.day_number}: {d.city}' for d in draft.days)}
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=600,
-                response_format={"type": "json_object"}
+                max_tokens=2000
             )
+            content = self._extract_json(content)
             data = _json.loads(content)
             insights = PlanInsights.model_validate(data)
             return insights
@@ -855,6 +914,50 @@ Days breakdown: {', '.join(f'Day {d.day_number}: {d.city}' for d in draft.days)}
                 best_time_to_visit="Check local weather and festival calendars for your travel dates."
             )
     
+    async def _enrich_day_narratives(self, constraints: TravelConstraints, draft: DraftItinerary):
+        """Add mood, highlight, and narrative to each day via a single LLM call."""
+        if not self.llm_client:
+            return
+
+        days_desc = []
+        for d in draft.days:
+            activities = [item.activity_name for item in d.items if item.type.value != "transport"]
+            days_desc.append(f"Day {d.day_number} in {d.city}: {', '.join(activities[:4])}")
+
+        system_prompt = """You are a travel storyteller. For each day, generate:
+- "mood": One evocative word (e.g. Wonder, Discovery, Adventure, Ease, Transition, Anticipation, Freedom, Awe)
+- "highlight": The standout moment in under 8 words (e.g. "Sunrise Over The Golden Temple")
+- "narrative": 1-2 sentences about today's experience — what makes this day special, what the traveler will feel
+
+Respond with JSON: {"days": [{"day": 1, "mood": "...", "highlight": "...", "narrative": "..."}, ...]}
+Be specific to the actual activities listed. No generic filler."""
+
+        prompt = f"""Trip: {constraints.duration_days} days, {constraints.destination_region}
+Preferences: {', '.join(constraints.preferences) if constraints.preferences else 'general'}
+
+{chr(10).join(days_desc)}"""
+
+        try:
+            import json as _json
+            content = await self.llm_client.chat_with_retry(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1500
+            )
+            content = self._extract_json(content)
+            data = _json.loads(content)
+            day_narratives = {item["day"]: item for item in data.get("days", [])}
+
+            for d in draft.days:
+                info = day_narratives.get(d.day_number, {})
+                d.mood = str(info.get("mood", ""))[:30] or None
+                d.highlight = str(info.get("highlight", ""))[:100] or None
+                d.day_narrative = str(info.get("narrative", ""))[:500] or None
+        except Exception as e:
+            print(f"Day narrative generation failed: {e}")
+
     async def repair(
         self,
         draft: DraftItinerary,

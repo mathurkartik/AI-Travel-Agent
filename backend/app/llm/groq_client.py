@@ -192,16 +192,16 @@ TRIP TYPE DETECTION:
                     {"role": "user", "content": natural_language_request}
                 ],
                 temperature=self.temperature,
-                max_tokens=self.max_tokens,
-                response_format={"type": "json_object"}
+                max_tokens=self.max_tokens
             )
-            
+
             # Record usage
             usage = response.usage
             self._record_usage(usage.prompt_tokens, usage.completion_tokens)
-            
-            # Parse and validate
+
+            # Parse and validate — extract JSON from response
             content = response.choices[0].message.content
+            content = self._extract_json(content)
             data = json.loads(content)
             constraints = TravelConstraints.model_validate(data)
             
@@ -265,16 +265,16 @@ TRIP TYPE DETECTION:
                     {"role": "user", "content": prompt}
                 ],
                 temperature=self.temperature,
-                max_tokens=max_tokens or self.max_tokens,
-                response_format={"type": "json_object"}
+                max_tokens=max_tokens or self.max_tokens
             )
-            
+
             # Record usage
             usage = response.usage
             self._record_usage(usage.prompt_tokens, usage.completion_tokens)
             
             # Parse and validate
             content = response.choices[0].message.content
+            content = self._extract_json(content)
             data = json.loads(content)
             result = output_schema.model_validate(data)
             
@@ -286,6 +286,30 @@ TRIP TYPE DETECTION:
         except Exception as e:
             raise RuntimeError(f"Generation failed: {str(e)}")
     
+    def _extract_json(self, text: str) -> str:
+        """Extract JSON from LLM response that may contain markdown fences or preamble."""
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            start = 1
+            end = len(lines)
+            for i in range(1, len(lines)):
+                if lines[i].strip() == "```":
+                    end = i
+                    break
+            text = "\n".join(lines[start:end]).strip()
+        brace = text.find("{")
+        bracket = text.find("[")
+        if brace == -1 and bracket == -1:
+            return text
+        if brace == -1:
+            start = bracket
+        elif bracket == -1:
+            start = brace
+        else:
+            start = min(brace, bracket)
+        return text[start:]
+
     async def chat_with_retry(
         self,
         messages: list,
@@ -297,7 +321,8 @@ TRIP TYPE DETECTION:
         """Chat completion with automatic retry on 429 rate limit errors."""
         if not self._client:
             raise RuntimeError("Groq client not initialized")
-        max_tokens = min(max_tokens, 2000)
+        settings = get_settings()
+        max_tokens = min(max_tokens, settings.groq_max_tokens_per_request)
         for attempt in range(max_retries):
             try:
                 kwargs = {
@@ -306,8 +331,6 @@ TRIP TYPE DETECTION:
                     "temperature": temperature or self.temperature,
                     "max_tokens": max_tokens,
                 }
-                if response_format:
-                    kwargs["response_format"] = response_format
                 response = self._client.chat.completions.create(**kwargs)
                 if response.usage:
                     self._record_usage(response.usage.prompt_tokens, response.usage.completion_tokens)

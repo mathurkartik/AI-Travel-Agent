@@ -30,6 +30,21 @@ class LogisticsAgent:
         self.tool_router = tool_router
         self.llm_client = llm_client
 
+    @staticmethod
+    def _extract_json_content(text: str) -> str:
+        """Extract JSON from LLM output that may have preamble or markdown fences."""
+        text = text.strip()
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:])
+            if "```" in text:
+                text = text[:text.rfind("```")]
+            text = text.strip()
+        brace = text.find("{")
+        if brace > 0:
+            text = text[brace:]
+        return text
+
     async def plan(self, constraints: TravelConstraints, activity_catalog: Optional[any] = None) -> LogisticsOutput:
         """Generate logistics plan from constraints."""
         cities = constraints.cities
@@ -118,10 +133,10 @@ Budget: {constraints.budget_total} {constraints.currency} for {constraints.durat
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=300,
-            response_format={"type": "json_object"}
+            max_tokens=300
         )
 
+        content = self._extract_json_content(content)
         data = json.loads(content)
         return data.get("neighborhoods", {})
 
@@ -197,10 +212,10 @@ Budget: {constraints.budget_total} {constraints.currency}"""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            max_tokens=600,
-            response_format={"type": "json_object"}
+            max_tokens=600
         )
 
+        content = self._extract_json_content(content)
         data = json.loads(content)
         movements = []
         for m in data.get("movements", []):
@@ -284,41 +299,41 @@ Budget: {constraints.budget_total} {constraints.currency}"""
     def _generate_day_slots(self, city: str, constraints: TravelConstraints,
                              activity_catalog: Optional[any] = None,
                              day_in_city: int = 0) -> List[DaySlot]:
-        """Generate day slots with activity descriptions, rotating activities across days."""
+        """Generate day slots with rich activity descriptions, rotating across days."""
         city_activities = []
         if activity_catalog and hasattr(activity_catalog, 'activities'):
             city_activities = [a for a in activity_catalog.activities if a.city == city]
 
-        prefs = [p.lower() for p in constraints.preferences] if constraints.preferences else []
         avoids = [a.lower() for a in constraints.avoidances] if constraints.avoidances else []
         crowd_avoid = any("crowd" in a for a in avoids)
 
-        offset = day_in_city * 2
-        available = city_activities[offset:] + city_activities[:offset] if city_activities else []
-        picks = available[:2] if available else []
+        non_food = [a for a in city_activities if a.type.value != "food"]
+        food_acts = [a for a in city_activities if a.type.value == "food"]
 
-        if picks:
-            morning_note = f"Visit {picks[0].name} in {city}."
-            if crowd_avoid:
-                morning_note += " Arrive early to avoid crowds."
+        n = len(non_food)
+        if n > 0:
+            offset = (day_in_city * 3) % n
+            available = non_food[offset:] + non_food[:offset]
         else:
-            morning_note = f"Explore {city}'s landmarks and cultural sites."
+            available = []
 
-        food_activities = [a for a in available if a.type.value == "food"]
-        food_pick = food_activities[day_in_city % max(1, len(food_activities))] if food_activities else None
-        if food_pick:
-            lunch_note = f"Lunch at {food_pick.name} in {city}."
-        elif any("food" in p or "eat" in p or "cuisine" in p for p in prefs):
-            lunch_note = f"Enjoy authentic {city} cuisine at a local restaurant."
-        else:
-            lunch_note = f"Lunch at a nearby restaurant."
+        def _activity_note(act):
+            desc = getattr(act, 'description', None) or getattr(act, 'rationale', None) or ""
+            timing = getattr(act, 'best_time', None)
+            parts = [f"{act.name}.", desc]
+            if timing and crowd_avoid:
+                parts.append(timing)
+            return " ".join(p for p in parts if p)
 
-        if len(picks) > 1:
-            afternoon_note = f"Visit {picks[1].name} in {city}."
-        else:
-            afternoon_note = f"Explore more of {city}'s attractions and neighborhoods."
+        nf = len(food_acts)
+        lunch_idx = (day_in_city * 2) % max(1, nf)
+        dinner_idx = (day_in_city * 2 + 1) % max(1, nf)
 
-        dinner_note = f"Dinner and evening in {city}."
+        morning_note = _activity_note(available[0]) if len(available) > 0 else f"Explore {city}'s landmarks."
+        lunch_note = _activity_note(food_acts[lunch_idx]) if nf > 0 else f"Lunch at a local restaurant in {city}."
+        afternoon_note = _activity_note(available[1]) if len(available) > 1 else f"Explore more of {city}."
+        evening_note = _activity_note(available[2]) if len(available) > 2 else f"Evening stroll in {city}."
+        dinner_note = _activity_note(food_acts[dinner_idx]) if nf > 1 else lunch_note
 
         return [
             DaySlot(slot_index=0, start_time="09:00", end_time="12:00",
@@ -327,7 +342,9 @@ Budget: {constraints.budget_total} {constraints.currency}"""
                     activity_type="lunch", city=city, notes=lunch_note),
             DaySlot(slot_index=2, start_time="14:00", end_time="17:00",
                     activity_type="afternoon", city=city, notes=afternoon_note),
-            DaySlot(slot_index=3, start_time="18:00", end_time="20:00",
+            DaySlot(slot_index=3, start_time="17:30", end_time="19:00",
+                    activity_type="evening", city=city, notes=evening_note),
+            DaySlot(slot_index=4, start_time="19:30", end_time="21:00",
                     activity_type="dinner", city=city, notes=dinner_note)
         ]
 
