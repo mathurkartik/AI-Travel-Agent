@@ -1,6 +1,6 @@
 """
-Gemini LLM Client with the same interface as GroqClient.
-Uses google-generativeai SDK for Gemini API access.
+Gemini LLM Client using the google-genai SDK (successor to google-generativeai).
+Same interface as GroqClient: chat_with_retry, extract_constraints, generate_with_schema.
 """
 
 import asyncio
@@ -9,9 +9,11 @@ import time
 from typing import Optional, Any, Dict, Type, TypeVar
 
 try:
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types as genai_types
 except ImportError:
     genai = None
+    genai_types = None
 
 from ..config import get_settings
 from ..models import TravelConstraints
@@ -46,8 +48,7 @@ class GeminiClient:
 
         self._client = None
         if genai and self.api_key:
-            genai.configure(api_key=self.api_key)
-            self._client = genai.GenerativeModel(self.model)
+            self._client = genai.Client(api_key=self.api_key)
 
         if self.enable_tracking:
             self._tracker = get_token_tracker(settings.token_buffer_percent)
@@ -101,6 +102,21 @@ class GeminiClient:
                     break
             text = "\n".join(lines[start:end]).strip()
         return text
+
+    def _generate_sync(self, prompt: str, max_tokens: int, temperature: float, json_mode: bool = False):
+        """Synchronous call to Gemini API via google-genai SDK."""
+        config = {
+            "temperature": temperature,
+            "max_output_tokens": max_tokens,
+        }
+        if json_mode:
+            config["response_mime_type"] = "application/json"
+
+        return self._client.models.generate_content(
+            model=self.model,
+            contents=prompt,
+            config=config,
+        )
 
     async def extract_constraints(
         self,
@@ -177,19 +193,13 @@ TRIP TYPE DETECTION:
             combined_prompt = f"{system_prompt}\n\nUser request: {natural_language_request}"
 
             response = await asyncio.to_thread(
-                self._client.generate_content,
-                combined_prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=self.temperature,
-                    max_output_tokens=self.max_tokens,
-                    response_mime_type="application/json",
-                ),
+                self._generate_sync, combined_prompt, self.max_tokens, self.temperature, True
             )
 
-            if response.usage_metadata:
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
                 self._record_usage(
-                    response.usage_metadata.prompt_token_count or 0,
-                    response.usage_metadata.candidates_token_count or 0,
+                    getattr(response.usage_metadata, 'prompt_token_count', 0) or 0,
+                    getattr(response.usage_metadata, 'candidates_token_count', 0) or 0,
                 )
 
             content = self._extract_json(response.text)
@@ -235,19 +245,13 @@ TRIP TYPE DETECTION:
             combined_prompt = f"{system_prompt}\n\n{prompt}"
 
             response = await asyncio.to_thread(
-                self._client.generate_content,
-                combined_prompt,
-                generation_config=genai.types.GenerationConfig(
-                    temperature=self.temperature,
-                    max_output_tokens=max_tokens or self.max_tokens,
-                    response_mime_type="application/json",
-                ),
+                self._generate_sync, combined_prompt, max_tokens or self.max_tokens, self.temperature, True
             )
 
-            if response.usage_metadata:
+            if hasattr(response, 'usage_metadata') and response.usage_metadata:
                 self._record_usage(
-                    response.usage_metadata.prompt_token_count or 0,
-                    response.usage_metadata.candidates_token_count or 0,
+                    getattr(response.usage_metadata, 'prompt_token_count', 0) or 0,
+                    getattr(response.usage_metadata, 'candidates_token_count', 0) or 0,
                 )
 
             content = self._extract_json(response.text)
@@ -273,7 +277,6 @@ TRIP TYPE DETECTION:
             raise RuntimeError("Gemini client not initialized")
         max_tokens = min(max_tokens, 600)
 
-        # Convert OpenAI-style messages to a single Gemini prompt
         combined = []
         for msg in messages:
             role = msg.get("role", "user")
@@ -284,33 +287,26 @@ TRIP TYPE DETECTION:
                 combined.append(content)
         prompt_text = "\n\n".join(combined)
 
-        gen_config = genai.types.GenerationConfig(
-            temperature=temperature or self.temperature,
-            max_output_tokens=max_tokens,
-        )
-        if response_format and response_format.get("type") == "json_object":
-            gen_config = genai.types.GenerationConfig(
-                temperature=temperature or self.temperature,
-                max_output_tokens=max_tokens,
-                response_mime_type="application/json",
-            )
+        json_mode = bool(response_format and response_format.get("type") == "json_object")
 
         for attempt in range(max_retries):
             try:
                 response = await asyncio.to_thread(
-                    self._client.generate_content,
+                    self._generate_sync,
                     prompt_text,
-                    generation_config=gen_config,
+                    max_tokens,
+                    temperature or self.temperature,
+                    json_mode,
                 )
 
-                if response.usage_metadata:
+                if hasattr(response, 'usage_metadata') and response.usage_metadata:
                     self._record_usage(
-                        response.usage_metadata.prompt_token_count or 0,
-                        response.usage_metadata.candidates_token_count or 0,
+                        getattr(response.usage_metadata, 'prompt_token_count', 0) or 0,
+                        getattr(response.usage_metadata, 'candidates_token_count', 0) or 0,
                     )
 
                 text = response.text
-                if response_format and response_format.get("type") == "json_object":
+                if json_mode:
                     text = self._extract_json(text)
                 return text
 
