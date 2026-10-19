@@ -24,6 +24,7 @@ from .review import ReviewAgent
 from .trip_structuring import TripStructuringAgent
 from ..tools import ToolRouter
 from ..utils.observability import ObservabilityLogger
+from ..core.feature_flags import get_flag
 
 
 class OrchestratorAgent:
@@ -255,58 +256,11 @@ class OrchestratorAgent:
         )
         
         # Step 5: Review → Repair loop (Phase 6-7, max 3 retries)
+        # Gated by the quality_gate feature flag
         max_repair_cycles = self._settings.max_review_retries
         repair_count = 0
-        
-        try:
-            review_report = await asyncio.wait_for(
-                self.review_agent.review(draft, constraints),
-                timeout=timeout_seconds
-            )
-        except asyncio.TimeoutError:
-            ObservabilityLogger.log_partial_failure(
-                trace_id, "review_agent",
-                "pass_without_review", "Review timed out, assuming pass"
-            )
-            # Create passing review report as fallback
-            from ..models import ReviewReport, ReviewStatus
-            review_report = ReviewReport(
-                draft_version=draft.version,
-                overall_status=ReviewStatus.PASS,
-                checklist=[],
-                blocking_issues=[],
-                advisory_warnings=["Review timed out - manual verification recommended"],
-                repair_hints=[]
-            )
-        
-        # Log review outcome
-        ObservabilityLogger.log_review_outcome(
-            trace_id, draft.version, review_report.overall_status,
-            {"total": len(review_report.checklist), 
-             "passed": sum(1 for c in review_report.checklist if c.passed)},
-            len(review_report.blocking_issues),
-            len(review_report.advisory_warnings),
-            len(review_report.repair_hints)
-        )
-        
-        while review_report.overall_status == "fail" and repair_count < max_repair_cycles:
-            print(f"Repair cycle {repair_count + 1}: Addressing {len(review_report.repair_hints)} issues...")
-            
-            # Log repair action
-            actions = [h.suggested_action[:50] for h in review_report.repair_hints[:3]]
-            ObservabilityLogger.log_repair_action(trace_id, repair_count + 1, 
-                                                len(review_report.repair_hints), actions)
-            
-            # Attempt repair based on repair hints
-            draft = await self.repair(
-                draft=draft,
-                review_report=review_report,
-                constraints=constraints
-            )
-            
-            repair_count += 1
-            
-            # Re-review after repair
+
+        if get_flag("quality_gate", default=True):
             try:
                 review_report = await asyncio.wait_for(
                     self.review_agent.review(draft, constraints),
@@ -315,16 +269,71 @@ class OrchestratorAgent:
             except asyncio.TimeoutError:
                 ObservabilityLogger.log_partial_failure(
                     trace_id, "review_agent",
-                    "pass_without_review", f"Re-review timed out after cycle {repair_count}"
+                    "pass_without_review", "Review timed out, assuming pass"
                 )
-                break
-            
-            if review_report.overall_status == "pass":
-                print(f"Repair successful after {repair_count} cycle(s)")
-                break
-        
-        if review_report.overall_status == "fail":
-            print(f"Warning: Max repair cycles ({max_repair_cycles}) reached. Returning best-effort plan.")
+                from ..models import ReviewReport, ReviewStatus
+                review_report = ReviewReport(
+                    draft_version=draft.version,
+                    overall_status=ReviewStatus.PASS,
+                    checklist=[],
+                    blocking_issues=[],
+                    advisory_warnings=["Review timed out - manual verification recommended"],
+                    repair_hints=[]
+                )
+
+            ObservabilityLogger.log_review_outcome(
+                trace_id, draft.version, review_report.overall_status,
+                {"total": len(review_report.checklist),
+                 "passed": sum(1 for c in review_report.checklist if c.passed)},
+                len(review_report.blocking_issues),
+                len(review_report.advisory_warnings),
+                len(review_report.repair_hints)
+            )
+
+            while review_report.overall_status == "fail" and repair_count < max_repair_cycles:
+                print(f"Repair cycle {repair_count + 1}: Addressing {len(review_report.repair_hints)} issues...")
+
+                actions = [h.suggested_action[:50] for h in review_report.repair_hints[:3]]
+                ObservabilityLogger.log_repair_action(trace_id, repair_count + 1,
+                                                    len(review_report.repair_hints), actions)
+
+                draft = await self.repair(
+                    draft=draft,
+                    review_report=review_report,
+                    constraints=constraints
+                )
+
+                repair_count += 1
+
+                try:
+                    review_report = await asyncio.wait_for(
+                        self.review_agent.review(draft, constraints),
+                        timeout=timeout_seconds
+                    )
+                except asyncio.TimeoutError:
+                    ObservabilityLogger.log_partial_failure(
+                        trace_id, "review_agent",
+                        "pass_without_review", f"Re-review timed out after cycle {repair_count}"
+                    )
+                    break
+
+                if review_report.overall_status == "pass":
+                    print(f"Repair successful after {repair_count} cycle(s)")
+                    break
+
+            if review_report.overall_status == "fail":
+                print(f"Warning: Max repair cycles ({max_repair_cycles}) reached. Returning best-effort plan.")
+        else:
+            # Quality gate disabled — skip review entirely
+            from ..models import ReviewReport, ReviewStatus
+            review_report = ReviewReport(
+                draft_version=draft.version,
+                overall_status=ReviewStatus.PASS,
+                checklist=[],
+                blocking_issues=[],
+                advisory_warnings=["Quality gate disabled via feature flag"],
+                repair_hints=[]
+            )
         
         # Step 6: Generate insights (Strategic + Budget Reality Check)
         insights = await self._generate_insights(constraints, draft)

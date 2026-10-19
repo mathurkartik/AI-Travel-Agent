@@ -622,6 +622,7 @@ class PlanRequest(BaseModel):
 
 class PlanResponse(BaseModel):
     """POST /api/plan response body."""
+    plan_id: Optional[str] = Field(default=None, description="Unique plan ID for feedback reference")
     final_itinerary: FinalItinerary
     constraints: TravelConstraints
     review_summary: ReviewStatus

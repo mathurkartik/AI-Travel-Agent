@@ -1,0 +1,225 @@
+{
+  "mode": "mock",
+  "timestamp": "2026-10-19T10:18:08.193381+00:00",
+  "total_cases": 12,
+  "structural_completeness": 0.951,
+  "quality_gate_pass_rate": 1.0,
+  "repair_rate": 0.0,
+  "total_repairs": 0,
+  "avg_latency_seconds": 0.04,
+  "results": [
+    {
+      "query": "5 day trip to Goa, budget $1000",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "no_empty_days": true,
+          "day_count_matches": true
+        },
+        "details": {},
+        "passed": 4,
+        "total": 4,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.44
+    },
+    {
+      "query": "3 day trip to Paris with a budget of $2000 USD. I love food and museums.",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true
+        },
+        "details": {},
+        "passed": 3,
+        "total": 3,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "7 day trip to Japan visiting Tokyo and Kyoto, budget 50000 INR",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true,
+          "all_destinations_present": true
+        },
+        "details": {},
+        "passed": 4,
+        "total": 4,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "10 day luxury trip to Italy, budget $8000",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true
+        },
+        "details": {},
+        "passed": 3,
+        "total": 3,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "4 day trip to Dubai, moderate budget $3000",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true
+        },
+        "details": {},
+        "passed": 3,
+        "total": 3,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "15 day road trip across New Zealand, budget $5000",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "day_count_matches": true,
+          "multi_region_structure": false
+        },
+        "details": {
+          "multi_region_structure": "only 1 cities, expected >= 3"
+        },
+        "passed": 2,
+        "total": 3,
+        "score": 0.67
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "6 day trip to Thailand visiting Bangkok and Chiang Mai, budget $1500",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true,
+          "all_destinations_present": true
+        },
+        "details": {},
+        "passed": 4,
+        "total": 4,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "2 day trip to Singapore, budget $800 USD",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true
+        },
+        "details": {},
+        "passed": 3,
+        "total": 3,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "12 day backpacking trip to India visiting Delhi, Agra and Jaipur, budget 80000 INR",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true,
+          "all_destinations_present": true
+        },
+        "details": {},
+        "passed": 4,
+        "total": 4,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "5 day trip to Bali, budget $1200",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true
+        },
+        "details": {},
+        "passed": 3,
+        "total": 3,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "8 day trip to Spain visiting Barcelona and Madrid, budget \u00e2\u201a\u00ac3000",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "budget_within_110_percent": true,
+          "day_count_matches": true,
+          "all_destinations_present": true
+        },
+        "details": {},
+        "passed": 4,
+        "total": 4,
+        "score": 1.0
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    },
+    {
+      "query": "14 day road trip across Iceland, budget $6000",
+      "quality": {
+        "checks": {
+          "all_days_have_activities": true,
+          "day_count_matches": true,
+          "multi_region_structure": false
+        },
+        "details": {
+          "multi_region_structure": "only 1 cities, expected >= 3"
+        },
+        "passed": 2,
+        "total": 3,
+        "score": 0.67
+      },
+      "review_status": "pass",
+      "repair_cycles": 0,
+      "latency_seconds": 0.0
+    }
+  ]
+}

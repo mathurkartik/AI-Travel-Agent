@@ -23,6 +23,9 @@ from ..models import (
 
 from pydantic import BaseModel
 
+from ..core.feedback import FeedbackRequest, get_feedback_store
+from ..core.ab_testing import get_ab_manager
+
 class BookingRequest(BaseModel):
     name: str
     email: str
@@ -91,6 +94,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
         processing_time_ms = int((time.time() - start_time) * 1000)
         
         return PlanResponse(
+            plan_id=str(final_itinerary.id),
             final_itinerary=final_itinerary,
             constraints=final_itinerary.constraints,
             review_summary=final_itinerary.review_status,
@@ -356,6 +360,7 @@ async def create_plan(request: Request, plan_request: PlanRequest):
         )
         
         return PlanResponse(
+            plan_id=str(stub_itinerary.id),
             final_itinerary=stub_itinerary,
             constraints=stub_constraints,
             review_summary=ReviewStatus.PASS,
@@ -461,3 +466,57 @@ async def reset_response_cache():
         "previous_entries": stats_before["entries"],
         "previous_hits": stats_before["hits"],
     }
+
+
+# ==========================================================================
+# Feedback endpoints
+# ==========================================================================
+
+@router.post("/feedback", tags=["Feedback"])
+async def submit_feedback(feedback: FeedbackRequest):
+    """Submit user feedback for a generated travel plan."""
+    store = get_feedback_store()
+
+    ab = get_ab_manager()
+    variant_info = {}
+    for assignment in ab.assign_all(feedback.session_id).values():
+        variant_info[assignment["experiment"]] = assignment["variant"]
+
+    entry = store.save(feedback, variant_info=variant_info if variant_info else None)
+    return {"status": "ok", "saved": entry}
+
+
+@router.get("/feedback/summary", tags=["Feedback"])
+async def feedback_summary():
+    """Aggregate feedback statistics with optional per-variant breakdown."""
+    store = get_feedback_store()
+    return store.get_summary()
+
+
+# ==========================================================================
+# A/B testing endpoints
+# ==========================================================================
+
+@router.get("/ab/results", tags=["A/B Testing"])
+async def ab_results():
+    """Per-experiment variant assignment counts."""
+    ab = get_ab_manager()
+    return {"experiments": ab.get_results()}
+
+
+@router.get("/ab/experiments", tags=["A/B Testing"])
+async def ab_experiments():
+    """List active A/B experiments."""
+    ab = get_ab_manager()
+    return {"active": ab.get_active_experiments()}
+
+
+# ==========================================================================
+# Feature flags endpoint
+# ==========================================================================
+
+@router.get("/flags", tags=["Feature Flags"])
+async def list_flags():
+    """Current feature flag state."""
+    from ..core.feature_flags import get_all_flags
+    return {"flags": get_all_flags()}

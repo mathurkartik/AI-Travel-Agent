@@ -1,0 +1,23 @@
+experiments:
+  quality_gate_test:
+    enabled: true
+    variants:
+      with_gate:
+        weight: 50
+        flags:
+          quality_gate: true
+      without_gate:
+        weight: 50
+        flags:
+          quality_gate: false
+  parallel_execution_test:
+    enabled: false
+    variants:
+      sequential:
+        weight: 50
+        flags:
+          parallel_agents: false
+      parallel:
+        weight: 50
+        flags:
+          parallel_agents: true

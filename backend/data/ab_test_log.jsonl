@@ -1,0 +1,1 @@
+{"experiment": "quality_gate_test", "variant": "with_gate", "flags": {"quality_gate": true}, "session_id": "test-session-123", "timestamp": "2026-10-19T10:18:16.090630+00:00"}

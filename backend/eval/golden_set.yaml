@@ -1,0 +1,127 @@
+test_cases:
+  - query: "5 day trip to Goa, budget $1000"
+    expected_days: 5
+    expected_destinations: ["Goa"]
+    expected_budget_max: 1000
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - no_empty_days
+      - day_count_matches
+
+  - query: "3 day trip to Paris with a budget of $2000 USD. I love food and museums."
+    expected_days: 3
+    expected_destinations: ["Paris"]
+    expected_budget_max: 2000
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+
+  - query: "7 day trip to Japan visiting Tokyo and Kyoto, budget 50000 INR"
+    expected_days: 7
+    expected_destinations: ["Tokyo", "Kyoto"]
+    expected_budget_max: 50000
+    expected_currency: "INR"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+      - all_destinations_present
+
+  - query: "10 day luxury trip to Italy, budget $8000"
+    expected_days: 10
+    expected_destinations: ["Italy"]
+    expected_budget_max: 8000
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+
+  - query: "4 day trip to Dubai, moderate budget $3000"
+    expected_days: 4
+    expected_destinations: ["Dubai"]
+    expected_budget_max: 3000
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+
+  - query: "15 day road trip across New Zealand, budget $5000"
+    expected_days: 15
+    expected_destinations: ["New Zealand"]
+    expected_min_destinations: 3
+    expected_budget_max: 5000
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - day_count_matches
+      - multi_region_structure
+
+  - query: "6 day trip to Thailand visiting Bangkok and Chiang Mai, budget $1500"
+    expected_days: 6
+    expected_destinations: ["Bangkok", "Chiang Mai"]
+    expected_budget_max: 1500
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+      - all_destinations_present
+
+  - query: "2 day trip to Singapore, budget $800 USD"
+    expected_days: 2
+    expected_destinations: ["Singapore"]
+    expected_budget_max: 800
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+
+  - query: "12 day backpacking trip to India visiting Delhi, Agra and Jaipur, budget 80000 INR"
+    expected_days: 12
+    expected_destinations: ["Delhi", "Agra", "Jaipur"]
+    expected_budget_max: 80000
+    expected_currency: "INR"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+      - all_destinations_present
+
+  - query: "5 day trip to Bali, budget $1200"
+    expected_days: 5
+    expected_destinations: ["Bali"]
+    expected_budget_max: 1200
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+
+  - query: "8 day trip to Spain visiting Barcelona and Madrid, budget €3000"
+    expected_days: 8
+    expected_destinations: ["Barcelona", "Madrid"]
+    expected_budget_max: 3000
+    expected_currency: "EUR"
+    quality_checks:
+      - all_days_have_activities
+      - budget_within_110_percent
+      - day_count_matches
+      - all_destinations_present
+
+  - query: "14 day road trip across Iceland, budget $6000"
+    expected_days: 14
+    expected_destinations: ["Iceland"]
+    expected_min_destinations: 3
+    expected_budget_max: 6000
+    expected_currency: "USD"
+    quality_checks:
+      - all_days_have_activities
+      - day_count_matches
+      - multi_region_structure
